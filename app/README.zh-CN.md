@@ -1,10 +1,10 @@
-# Multi-Agent Situational Awareness Platform
+# 多智能体态势精准感知平台（App 目录）
 
-[中文说明 / Chinese version](README.zh-CN.md)
+[English version / 英文说明](README.md)
 
-This folder contains the runnable project (backend + frontend) for your graduation design.
+这个目录是可直接运行的项目主体（后端 + 前端 + 脚本）。
 
-## Structure
+## 目录结构
 
 ```text
 app/
@@ -29,7 +29,7 @@ app/
 `-- results/
 ```
 
-## Start Backend API
+## 启动后端 API
 
 ```bash
 cd app
@@ -37,14 +37,14 @@ uv sync --extra api
 uv run mas-api
 ```
 
-API:
+API 接口：
 - `GET /api/health`
 - `POST /api/simulate`
 - `POST /api/experiments`
 
-## Start React Frontend
+## 启动 React 前端
 
-Open another terminal:
+新开一个终端：
 
 ```bash
 cd app/web
@@ -52,13 +52,11 @@ npm install
 npm run dev
 ```
 
-Frontend URL:
-- `http://127.0.0.1:5173`
+访问地址：
+- 前端：`http://127.0.0.1:5173`
+- 后端：`http://127.0.0.1:8000`
 
-Backend URL:
-- `http://127.0.0.1:8000`
-
-## Quick CLI (Optional)
+## 可选 CLI 快捷命令
 
 ```bash
 cd app
