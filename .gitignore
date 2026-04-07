@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+**/.venv/
+**/venv/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+
+# Local output
+results/
+**/results/
+
+# Local browser traces
+.playwright-mcp/
+**/.playwright-mcp/
+
+# React frontend
+web/node_modules/
+web/dist/
+**/web/node_modules/
+**/web/dist/

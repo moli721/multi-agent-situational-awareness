@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "multi-agent-situational-awareness"
+version = "0.2.0"
+description = "Simulation-oriented multi-agent situational awareness platform."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Xiao Han" }]
+dependencies = []
+
+[project.optional-dependencies]
+viz = [
+  "matplotlib>=3.8",
+  "pandas>=2.0",
+]
+api = [
+  "fastapi>=0.116",
+  "uvicorn>=0.35",
+  "pydantic>=2.11",
+]
+
+[project.scripts]
+mas-demo = "mas_platform.cli:demo_main"
+mas-experiments = "mas_platform.cli:experiments_main"
+mas-render = "mas_platform.cli:render_main"
+mas-frontend = "mas_platform.web_frontend:launch_react_frontend"
+mas-api = "mas_platform.api:run_api"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mas_platform"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/mas_platform",
+  "run_demo.py",
+  "run_experiments.py",
+  "run_render.py",
+  "run_frontend.py",
+  "web",
+  "README.md",
+]
