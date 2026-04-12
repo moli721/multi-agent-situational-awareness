@@ -1,43 +1,46 @@
 # Multi-Agent Situational Awareness Platform
 
-[中文说明 / Chinese version](README.zh-CN.md)
+Single-source project README for this repository.
 
-Graduation project repository for a simulation-first multi-agent situational awareness system.
+## What This Project Is
 
-## Overview
+This is a simulation-first multi-agent situational awareness platform for a graduation thesis project.  
+The runnable system is under `app/` and includes:
 
-- Python simulation engine for dynamic multi-agent collaboration
-- FastAPI backend for simulation and experiment APIs
-- React dashboard for parameter control and visual analysis
-- Scenario-based experiments for thesis evaluation and defense demos
+- Python simulation engine
+- FastAPI backend
+- React + Vite frontend
+- Experiment and tracking workflow for reproducible evaluation
 
-## Key Features
+## Main Features
 
-- Dynamic 2D environment (obstacles, hotspots, moving targets)
-- Decentralized OODA-style perception and decision loop
-- Communication constraints (range, delay, packet loss, bandwidth cap)
-- Conflict-aware task allocation and failure injection
-- Experiment pipelines for normal / no-comm / fault scenarios
+- Dynamic 2D environment with obstacles, hotspots, and moving targets
+- Decentralized OODA-style agent loop
+- Communication constraints (range, delay, loss, bandwidth limit)
+- Scenario presets (`normal`, `no-comm`, `fault`)
+- Config-driven runs with YAML files
+- Run tracking with metadata (config hash, git info, runtime context)
+- PettingZoo Parallel API interoperability (MARL smoke test)
 
 ## Repository Layout
 
 ```text
 .
-|-- app/                         # runnable project
-|   |-- src/mas_platform/        # simulation + API + CLI
-|   |-- web/                     # React + Vite frontend
+|-- app/
+|   |-- configs/
+|   |-- src/mas_platform/
+|   |-- web/
 |   |-- run_demo.py
 |   |-- run_experiments.py
 |   |-- run_render.py
 |   |-- pyproject.toml
 |   `-- uv.lock
-|-- thesis/                      # thesis materials
-`-- *.extracted.txt              # extracted assignment/topic texts
+`-- thesis/
 ```
 
 ## Quick Start
 
-### Start Backend API
+### 1) Backend
 
 ```bash
 cd app
@@ -45,11 +48,9 @@ uv sync --extra api
 uv run mas-api
 ```
 
-Backend URL: `http://127.0.0.1:8000`
+Backend: `http://127.0.0.1:8000`
 
-### Start Frontend
-
-Open a new terminal:
+### 2) Frontend
 
 ```bash
 cd app/web
@@ -57,55 +58,44 @@ npm install
 npm run dev
 ```
 
-Frontend URL: `http://127.0.0.1:5173`
+Frontend: `http://127.0.0.1:5173`
 
-## CLI Commands (run in `app/`)
+## Common Commands (run in `app/`)
 
 ```bash
 uv run mas-demo
 uv run mas-experiments
+uv run mas-experiments --runs 30 --strategies current,nearest,random
 uv run mas-render
-uv run mas-api
-uv run mas-frontend
+uv run mas-dump-config --out configs/default.generated.yaml
 ```
 
-## API Endpoints
+Config-based usage:
+
+```bash
+uv run python -m mas_platform demo --config configs/default.yaml --seed 2026
+uv run python -m mas_platform experiments --config configs/fault_heavy.yaml --runs 30
+uv run python -m mas_platform render --config configs/default.yaml
+```
+
+MARL smoke test:
+
+```bash
+uv sync --extra marl
+uv run mas-marl-smoke --steps 20
+```
+
+## API
 
 - `GET /api/health`
+- `GET /api/config/default`
+- `GET /api/presets`
 - `POST /api/simulate`
 - `POST /api/experiments`
 
-Example request:
+## Outputs
 
-```json
-{
-  "config": {
-    "num_agents": 12,
-    "num_targets": 14,
-    "enable_communication": true
-  }
-}
-```
-
-## Core Metrics
-
-- `task_completion_rate`
-- `collaboration_efficiency`
-- `decision_response_time_steps`
-- `coverage_rate`
-- `average_information_age`
-- `assignment_conflicts`
-- `messages_sent`
-- `messages_received`
-- `failed_agents`
-
-## Tech Stack
-
-- Backend: Python, FastAPI, Pydantic, uvicorn
-- Simulation: custom MAS engine
-- Frontend: React, Vite, Recharts
-- Environment management: uv
-
-## Additional Docs
-
-- Detailed runtime notes: [app/README.md](app/README.md)
+- `app/results/experiment_summary.csv`
+- `app/results/experiment_strategy_matrix.csv`
+- `app/results/experiment_report.md`
+- `app/results/runs/<timestamp>-<run_type>/`
