@@ -21,8 +21,8 @@ class SimulationConfig:
     min_tracking_confidence: float = 0.25
     belief_decay: float = 0.07
     max_shared_targets: int = 6
-    owner_hint_penalty: float = 0.18
-    packet_loss_prob: float = 0.10
+    owner_hint_penalty: float = 0.30
+    packet_loss_prob: float = 0.00
     comm_delay_steps: int = 1
 
     # Dynamics and disturbance
@@ -33,6 +33,7 @@ class SimulationConfig:
 
     # Runtime and export
     record_history: bool = False
+    decision_strategy: str = "current"
 
     # Reproducibility
     random_seed: int = 42

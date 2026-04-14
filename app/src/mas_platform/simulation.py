@@ -190,8 +190,11 @@ class SituationalSimulation:
             for target_id in active_target_ids:
                 belief = agent.belief_map.get(target_id)
                 if belief is None:
+                    # Penalize blind spots so "unknown targets" are reflected in age metric.
+                    self.info_age_total += float(self.current_step)
+                    self.info_age_samples += 1
                     continue
-                self.info_age_total += max(0, self.current_step - belief.observed_step)
+                self.info_age_total += float(max(0, self.current_step - belief.observed_step))
                 self.info_age_samples += 1
 
     def _phase_observe(self) -> None:
@@ -236,17 +239,111 @@ class SituationalSimulation:
                 neighbor.inbox.append(message)
                 agent.messages_sent += 1
 
-    def _phase_decide(self) -> None:
-        # First pass: each agent chooses its preferred target independently.
-        first_choice_by_agent: Dict[int, Optional[int]] = {}
-        requested_by_target: Dict[int, List[int]] = {}
-        no_block: Set[int] = set()
-
-        for agent_id in sorted(self.agents):
-            agent = self.agents[agent_id]
-            if agent.failed:
-                agent.assigned_target = None
+    def _build_team_distance_hints(self) -> Dict[int, Tuple[int, int]]:
+        hints: Dict[int, Tuple[int, int]] = {}
+        for target_id, target in self.targets.items():
+            if not target.active:
                 continue
+            best: Optional[Tuple[int, int]] = None
+            for agent in self.agents.values():
+                if agent.failed:
+                    continue
+                belief = agent.belief_map.get(target_id)
+                if belief is None:
+                    continue
+                age = max(0, self.current_step - belief.observed_step)
+                eff_conf = belief.confidence * ((1 - self.config.belief_decay) ** age)
+                if eff_conf < self.config.min_tracking_confidence:
+                    continue
+                candidate = (manhattan_distance(agent.pos, belief.pos), agent.agent_id)
+                if best is None or candidate < best:
+                    best = candidate
+            if best is not None:
+                best_distance, best_agent_id = best
+                hints[target_id] = (best_agent_id, best_distance)
+        return hints
+
+    def _resolve_conflict_winner(self, target_id: int, agent_ids: List[int]) -> Optional[int]:
+        strategy = (self.config.decision_strategy or "current").lower()
+        if strategy == "random":
+            if not agent_ids:
+                return None
+            return self.rng.choice(sorted(agent_ids))
+
+        ranked: List[Tuple[int, float, int, int]] = []
+        for agent_id in agent_ids:
+            agent = self.agents[agent_id]
+            belief = agent.belief_map.get(target_id)
+            if belief is None:
+                continue
+            age = max(0, self.current_step - belief.observed_step)
+            eff_conf = belief.confidence * ((1 - self.config.belief_decay) ** age)
+            distance = manhattan_distance(agent.pos, belief.pos)
+            local_priority = 0 if target_id in agent.locally_observed_this_step else 1
+            if strategy == "nearest":
+                local_priority = 1
+            ranked.append((distance, -eff_conf, local_priority, agent_id))
+        if not ranked:
+            return None
+        ranked.sort()
+        return ranked[0][3]
+
+    def _best_candidate_distance(self, agent: SituationalAgent) -> int:
+        best_distance: Optional[int] = None
+        for target_id, target in self.targets.items():
+            if not target.active:
+                continue
+            belief = agent.belief_map.get(target_id)
+            if belief is None:
+                continue
+            age = max(0, self.current_step - belief.observed_step)
+            eff_conf = belief.confidence * ((1 - self.config.belief_decay) ** age)
+            if eff_conf < self.config.min_tracking_confidence:
+                continue
+            dist = manhattan_distance(agent.pos, belief.pos)
+            if best_distance is None or dist < best_distance:
+                best_distance = dist
+        if best_distance is None:
+            return 10**9
+        return best_distance
+
+    def _phase_decide(self) -> None:
+        for agent in self.agents.values():
+            agent.assigned_target = None
+            if agent.failed:
+                continue
+
+        team_distance_hints = self._build_team_distance_hints()
+        occupied_targets: Set[int] = set()
+        active_agent_ids = [
+            agent_id for agent_id, agent in self.agents.items() if not agent.failed
+        ]
+        active_agent_ids.sort(
+            key=lambda agent_id: (self._best_candidate_distance(self.agents[agent_id]), agent_id)
+        )
+        first_choice_groups: Dict[int, List[int]] = {}
+        for agent_id in active_agent_ids:
+            first_choice = self.agents[agent_id].choose_target(
+                targets=self.targets,
+                current_step=self.current_step,
+                belief_decay=self.config.belief_decay,
+                min_tracking_confidence=self.config.min_tracking_confidence,
+                owner_hint=self.target_owner_hint,
+                owner_penalty=self.config.owner_hint_penalty,
+                occupied=set(),
+                team_distance_hints=team_distance_hints,
+                strategy=self.config.decision_strategy,
+                rng=self.rng,
+            )
+            if first_choice is None:
+                continue
+            first_choice_groups.setdefault(first_choice, []).append(agent_id)
+        self.assignment_conflicts += sum(
+            1 for agent_ids in first_choice_groups.values() if len(agent_ids) > 1
+        )
+
+        for agent_id in active_agent_ids:
+            agent = self.agents[agent_id]
 
             chosen_target = agent.choose_target(
                 targets=self.targets,
@@ -255,73 +352,24 @@ class SituationalSimulation:
                 min_tracking_confidence=self.config.min_tracking_confidence,
                 owner_hint=self.target_owner_hint,
                 owner_penalty=self.config.owner_hint_penalty,
-                occupied=no_block,
+                occupied=occupied_targets,
+                team_distance_hints=team_distance_hints,
+                strategy=self.config.decision_strategy,
+                rng=self.rng,
             )
             if chosen_target is None:
-                first_choice_by_agent[agent_id] = None
                 continue
 
-            first_choice_by_agent[agent_id] = chosen_target
-            requested_by_target.setdefault(chosen_target, []).append(agent_id)
-
-        occupied_targets: Set[int] = set()
-        winners: Set[int] = set()
-        for target_id, agent_ids in requested_by_target.items():
-            if len(agent_ids) > 1:
-                self.assignment_conflicts += len(agent_ids) - 1
-            # Resolve by nearest estimated target position.
-            ranked = []
-            for agent_id in agent_ids:
-                agent = self.agents[agent_id]
-                belief = agent.belief_map.get(target_id)
-                if belief is None:
-                    continue
-                ranked.append((manhattan_distance(agent.pos, belief.pos), agent_id))
-            if not ranked:
-                continue
-            ranked.sort(key=lambda item: (item[0], item[1]))
-            winner_id = ranked[0][1]
-            winners.add(winner_id)
-            occupied_targets.add(target_id)
-            self.agents[winner_id].assigned_target = target_id
-            self.agents[winner_id].total_decisions += 1
-            self.target_owner_hint[target_id] = winner_id
-            winner_belief = self.agents[winner_id].belief_map.get(target_id)
-            if (
-                winner_belief is not None
-                and winner_belief.source_agent_id != winner_id
-            ):
-                self.agents[winner_id].shared_based_decisions += 1
-            if target_id in self.target_first_observed_step:
-                self.target_first_assigned_step.setdefault(target_id, self.current_step)
-
-        # Second pass: give losers a chance to pick unoccupied alternatives.
-        for agent_id in sorted(self.agents):
-            agent = self.agents[agent_id]
-            if agent.failed:
-                continue
-            if agent_id in winners:
-                continue
-            alternative = agent.choose_target(
-                targets=self.targets,
-                current_step=self.current_step,
-                belief_decay=self.config.belief_decay,
-                min_tracking_confidence=self.config.min_tracking_confidence,
-                owner_hint=self.target_owner_hint,
-                owner_penalty=self.config.owner_hint_penalty,
-                occupied=occupied_targets,
-            )
-            agent.assigned_target = alternative
-            if alternative is None:
-                continue
-            occupied_targets.add(alternative)
+            occupied_targets.add(chosen_target)
+            agent.assigned_target = chosen_target
             agent.total_decisions += 1
-            self.target_owner_hint[alternative] = agent_id
-            alt_belief = agent.belief_map.get(alternative)
-            if alt_belief is not None and alt_belief.source_agent_id != agent_id:
+            self.target_owner_hint[chosen_target] = agent_id
+
+            winner_belief = agent.belief_map.get(chosen_target)
+            if winner_belief is not None and winner_belief.source_agent_id != agent_id:
                 agent.shared_based_decisions += 1
-            if alternative in self.target_first_observed_step:
-                self.target_first_assigned_step.setdefault(alternative, self.current_step)
+            if chosen_target in self.target_first_observed_step:
+                self.target_first_assigned_step.setdefault(chosen_target, self.current_step)
 
     def _phase_act(self) -> None:
         blocked = set(self.obstacles)
@@ -417,7 +465,11 @@ class SituationalSimulation:
             if observed_step is None:
                 continue
             decision_latencies.append(max(0, completion_step - observed_step))
-        response_time = mean(decision_latencies) if decision_latencies else float(self.config.max_steps)
+        task_completion_latency = (
+            mean(decision_latencies)
+            if decision_latencies
+            else float(self.config.max_steps)
+        )
 
         total_decisions = sum(agent.total_decisions for agent in self.agents.values())
         shared_decisions = sum(agent.shared_based_decisions for agent in self.agents.values())
@@ -440,7 +492,9 @@ class SituationalSimulation:
             "steps_used": float(total_steps),
             "task_completion_rate": float(round(completion_rate, 4)),
             "collaboration_efficiency": float(round(collaboration_efficiency, 4)),
-            "decision_response_time_steps": float(round(response_time, 4)),
+            "task_completion_latency": float(round(task_completion_latency, 4)),
+            # Backward-compatible alias for existing consumers.
+            "decision_response_time_steps": float(round(task_completion_latency, 4)),
             "messages_sent": float(messages_sent),
             "messages_received": float(messages_received),
             "failed_agents": float(failed_agents),

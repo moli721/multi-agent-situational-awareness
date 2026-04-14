@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def _require_matplotlib():
@@ -84,4 +84,115 @@ def render_simulation_outputs(
     return {
         "final_snapshot": str(snapshot_path),
         "coverage_heatmap": str(heatmap_path),
+    }
+
+
+def _ordered_unique(values: List[str]) -> List[str]:
+    seen = set()
+    ordered: List[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
+def _compute_robustness_by_strategy(
+    strategy_rows: List[Dict[str, Any]],
+    normal_scenario: str = "with_comm_normal",
+    fault_scenario: str = "with_comm_fault",
+) -> Dict[str, float]:
+    table: Dict[str, Dict[str, float]] = {}
+    for row in strategy_rows:
+        strategy = str(row.get("strategy", ""))
+        scenario = str(row.get("scenario", ""))
+        completion = float(row.get("task_completion_rate", 0.0))
+        if not strategy or not scenario:
+            continue
+        table.setdefault(strategy, {})[scenario] = completion
+
+    robustness: Dict[str, float] = {}
+    for strategy, scenarios in table.items():
+        normal = scenarios.get(normal_scenario, 0.0)
+        fault = scenarios.get(fault_scenario, 0.0)
+        retention = (fault / normal) if normal > 0 else 0.0
+        robustness[strategy] = round(0.7 * fault + 0.3 * retention, 4)
+    return robustness
+
+
+def render_experiment_outputs(
+    strategy_rows: List[Dict[str, Any]],
+    output_dir: Path,
+    robustness_by_strategy: Optional[Dict[str, float]] = None,
+) -> Dict[str, str]:
+    plt = _require_matplotlib()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not strategy_rows:
+        raise RuntimeError("No strategy rows provided for experiment rendering.")
+
+    strategies = _ordered_unique([str(row.get("strategy", "")) for row in strategy_rows if row.get("strategy")])
+    scenarios_found = _ordered_unique([str(row.get("scenario", "")) for row in strategy_rows if row.get("scenario")])
+    preferred_scenarios = [
+        "with_comm_normal",
+        "without_comm_baseline",
+        "with_comm_fault",
+    ]
+    scenarios = [scenario for scenario in preferred_scenarios if scenario in scenarios_found] + [
+        scenario for scenario in scenarios_found if scenario not in preferred_scenarios
+    ]
+
+    completion_table: Dict[str, Dict[str, float]] = {
+        strategy: {scenario: 0.0 for scenario in scenarios} for strategy in strategies
+    }
+    for row in strategy_rows:
+        strategy = str(row.get("strategy", ""))
+        scenario = str(row.get("scenario", ""))
+        if strategy not in completion_table or scenario not in completion_table[strategy]:
+            continue
+        completion_table[strategy][scenario] = float(row.get("task_completion_rate", 0.0))
+
+    # Figure 1: completion by scenario (grouped bars by strategy).
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    x = list(range(len(scenarios)))
+    width = 0.8 / max(1, len(strategies))
+    for idx, strategy in enumerate(strategies):
+        offset = (idx - (len(strategies) - 1) / 2) * width
+        values = [completion_table[strategy].get(scenario, 0.0) for scenario in scenarios]
+        ax.bar([value + offset for value in x], values, width=width, label=strategy)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(scenarios, rotation=15, ha="right")
+    ax.set_ylim(0.0, 1.05)
+    ax.set_ylabel("Task Completion Rate")
+    ax.set_title("Task Completion by Scenario and Strategy")
+    ax.grid(axis="y", alpha=0.25)
+    ax.legend(loc="upper right")
+    completion_path = output_dir / "experiment_completion_by_scenario.png"
+    fig.savefig(completion_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
+    # Figure 2: robustness by strategy.
+    robustness = (
+        {k: float(v) for k, v in robustness_by_strategy.items()}
+        if robustness_by_strategy is not None
+        else _compute_robustness_by_strategy(strategy_rows)
+    )
+    robust_values = [robustness.get(strategy, 0.0) for strategy in strategies]
+
+    fig, ax = plt.subplots(figsize=(8.5, 4.8))
+    ax.bar(strategies, robust_values, width=0.65)
+    ax.axhline(1.0, color="tab:red", linestyle="--", linewidth=1.4, alpha=0.8, label="1.0 baseline")
+    ax.set_ylabel("Robustness Index")
+    ax.set_title("Robustness by Strategy (Fault-Weighted)")
+    ax.grid(axis="y", alpha=0.25)
+    ax.legend(loc="upper right")
+    robustness_path = output_dir / "experiment_robustness_by_strategy.png"
+    fig.savefig(robustness_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
+    return {
+        "experiment_completion_by_scenario": str(completion_path),
+        "experiment_robustness_by_strategy": str(robustness_path),
     }

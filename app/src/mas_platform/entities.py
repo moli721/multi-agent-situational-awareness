@@ -160,7 +160,8 @@ class SituationalAgent:
             if eff_conf < min_tracking_confidence:
                 continue
             priority = eff_conf - 0.01 * age
-            scored.append((priority, replace(belief, confidence=eff_conf)))
+            # Share the raw belief payload; receiver applies a single unified decay.
+            scored.append((priority, belief))
 
         scored.sort(key=lambda item: item[0], reverse=True)
         top = scored[:max_shared_targets]
@@ -175,11 +176,15 @@ class SituationalAgent:
         owner_hint: Dict[int, int],
         owner_penalty: float,
         occupied: Set[int],
+        team_distance_hints: Optional[Dict[int, Tuple[int, int]]] = None,
+        strategy: str = "current",
+        rng=None,
     ) -> Optional[int]:
         if self.failed:
             return None
 
-        ranked: List[Tuple[float, int]] = []
+        strategy_name = (strategy or "current").lower()
+        candidates: List[Tuple[int, int, float, float, float, float, float]] = []
         for target_id, belief in self.belief_map.items():
             target = targets.get(target_id)
             if target is None or not target.active or target_id in occupied:
@@ -193,14 +198,77 @@ class SituationalAgent:
             distance = manhattan_distance(self.pos, belief.pos)
             local_bonus = 0.15 if target_id in self.locally_observed_this_step else 0.0
             handoff_penalty = 0.0
+            proximity_penalty = 0.0
+            stale_shared_penalty = 0.0
             preferred_owner = owner_hint.get(target_id)
             if preferred_owner is not None and preferred_owner != self.agent_id:
-                handoff_penalty = owner_penalty
-            utility = eff_conf / (1 + distance) + local_bonus - handoff_penalty
-            ranked.append((utility, target_id))
+                # Increase owner bias to reduce redundant re-take behavior.
+                handoff_penalty = owner_penalty * 1.25
+                if target_id in self.locally_observed_this_step:
+                    handoff_penalty *= 0.8
 
-        if not ranked:
+            hint = team_distance_hints.get(target_id) if team_distance_hints else None
+            if hint is not None:
+                nearest_agent_id, nearest_distance = hint
+                if nearest_agent_id != self.agent_id:
+                    dist_gap = distance - nearest_distance
+                    if dist_gap <= 0:
+                        # Stable tie-break to avoid repeated equal-distance contention.
+                        proximity_penalty = 0.22
+                    elif dist_gap >= 1:
+                        # Soft "closest-agent-first" penalty.
+                        proximity_penalty = min(1.0, 0.28 * dist_gap)
+                    if preferred_owner is not None and preferred_owner == nearest_agent_id:
+                        handoff_penalty += min(0.65, owner_penalty * 0.4 * max(0, dist_gap))
+
+            if belief.source_agent_id != self.agent_id and age >= 3:
+                # Shared beliefs become risky under comm faults when they are stale.
+                stale_shared_penalty = min(0.7, 0.08 * (age - 2))
+
+            candidates.append(
+                (
+                    target_id,
+                    distance,
+                    eff_conf,
+                    local_bonus,
+                    handoff_penalty,
+                    proximity_penalty,
+                    stale_shared_penalty,
+                )
+            )
+
+        if not candidates:
             return None
+
+        if strategy_name == "nearest":
+            candidates.sort(key=lambda item: (item[1], -item[2], item[0]))
+            return candidates[0][0]
+
+        if strategy_name == "random":
+            choices = [item[0] for item in candidates]
+            if rng is not None:
+                return rng.choice(choices)
+            choices.sort()
+            return choices[0]
+
+        ranked: List[Tuple[float, int]] = []
+        for (
+            target_id,
+            distance,
+            eff_conf,
+            local_bonus,
+            handoff_penalty,
+            proximity_penalty,
+            stale_shared_penalty,
+        ) in candidates:
+            utility = (
+                eff_conf / (1 + distance)
+                + local_bonus
+                - handoff_penalty
+                - proximity_penalty
+                - stale_shared_penalty
+            )
+            ranked.append((utility, target_id))
 
         ranked.sort(key=lambda item: (item[0], -item[1]), reverse=True)
         return ranked[0][1]
