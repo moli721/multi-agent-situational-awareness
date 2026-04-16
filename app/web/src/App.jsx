@@ -7,22 +7,37 @@ import {
   Line,
   LineChart,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   XAxis,
   YAxis
 } from "recharts";
+import {
+  buildDerivedCards,
+  buildDerivedComparisonRows,
+  buildStrategyStatRows,
+  buildTradeoffScatterRows
+} from "./experimentInsights";
+import { resolveInitialLanguage, translate } from "./i18n";
 
-const STRATEGY_OPTIONS = [
-  { value: "current", label: "Collaborative" },
-  { value: "nearest", label: "Nearest" },
-  { value: "random", label: "Random" }
-];
+const STRATEGY_OPTIONS = ["current", "nearest", "random"];
+const SCENARIO_KEYS = ["with_comm_normal", "without_comm_baseline", "with_comm_fault"];
 
-const SCENARIO_LABELS = {
-  with_comm_normal: "Comm Normal",
-  without_comm_baseline: "No Comm",
-  with_comm_fault: "Comm Fault"
+const STRATEGY_COLORS = {
+  current: "#0ea5e9",
+  nearest: "#14b8a6",
+  random: "#f97316"
 };
+
+const STAT_METRIC_OPTIONS = [
+  { value: "task_completion_rate", labelKey: "statMetric.task_completion_rate" },
+  { value: "task_completion_latency", labelKey: "statMetric.task_completion_latency" },
+  { value: "coverage_rate", labelKey: "statMetric.coverage_rate" },
+  { value: "messages_sent", labelKey: "statMetric.messages_sent" },
+  { value: "average_information_age", labelKey: "statMetric.average_information_age" },
+  { value: "assignment_conflicts", labelKey: "statMetric.assignment_conflicts" }
+];
 
 const PLAY_SPEED_OPTIONS = [0.5, 1, 2, 4];
 
@@ -53,38 +68,38 @@ const DEFAULT_CONFIG = {
 
 const FIELD_GROUPS = [
   {
-    title: "World",
+    titleKey: "group.world",
     fields: [
-      ["random_seed", "Seed", "number", 1, 999999, 1],
-      ["width", "Width", "number", 20, 80, 1],
-      ["height", "Height", "number", 20, 80, 1],
-      ["num_agents", "Agents", "number", 4, 40, 1],
-      ["num_targets", "Targets", "number", 4, 40, 1],
-      ["num_obstacles", "Obstacles", "number", 0, 220, 1],
-      ["max_steps", "Max Steps", "number", 40, 500, 1]
+      ["random_seed", "number", 1, 999999, 1],
+      ["width", "number", 20, 80, 1],
+      ["height", "number", 20, 80, 1],
+      ["num_agents", "number", 4, 40, 1],
+      ["num_targets", "number", 4, 40, 1],
+      ["num_obstacles", "number", 0, 220, 1],
+      ["max_steps", "number", 40, 500, 1]
     ]
   },
   {
-    title: "Perception & Comm",
+    titleKey: "group.perceptionComm",
     fields: [
-      ["vision_range", "Vision", "number", 1, 12, 1],
-      ["comm_range", "Comm Range", "number", 1, 20, 1],
-      ["sense_miss_prob", "Sense Miss", "number", 0, 0.9, 0.01],
-      ["packet_loss_prob", "Packet Loss", "number", 0, 0.95, 0.01],
-      ["comm_delay_steps", "Delay", "number", 0, 10, 1],
-      ["max_shared_targets", "Shared Targets", "number", 1, 30, 1]
+      ["vision_range", "number", 1, 12, 1],
+      ["comm_range", "number", 1, 20, 1],
+      ["sense_miss_prob", "number", 0, 0.9, 0.01],
+      ["packet_loss_prob", "number", 0, 0.95, 0.01],
+      ["comm_delay_steps", "number", 0, 10, 1],
+      ["max_shared_targets", "number", 1, 30, 1]
     ]
   },
   {
-    title: "Dynamics",
+    titleKey: "group.dynamics",
     fields: [
-      ["target_move_prob", "Target Move", "number", 0, 0.9, 0.01],
-      ["target_hotspot_bias", "Hotspot Bias", "number", 0, 1, 0.01],
-      ["agent_failure_prob", "Failure Prob", "number", 0, 0.2, 0.001],
-      ["fault_injection_start", "Fault Start", "number", 0, 500, 1],
-      ["min_tracking_confidence", "Min Confidence", "number", 0.05, 0.95, 0.01],
-      ["belief_decay", "Belief Decay", "number", 0, 0.5, 0.01],
-      ["owner_hint_penalty", "Owner Penalty", "number", 0, 1, 0.01]
+      ["target_move_prob", "number", 0, 0.9, 0.01],
+      ["target_hotspot_bias", "number", 0, 1, 0.01],
+      ["agent_failure_prob", "number", 0, 0.2, 0.001],
+      ["fault_injection_start", "number", 0, 500, 1],
+      ["min_tracking_confidence", "number", 0.05, 0.95, 0.01],
+      ["belief_decay", "number", 0, 0.5, 0.01],
+      ["owner_hint_penalty", "number", 0, 1, 0.01]
     ]
   }
 ];
@@ -178,9 +193,9 @@ function enrichTimeline(timeline) {
   });
 }
 
-function buildPlaybackKeyframes(timeline) {
+function buildPlaybackKeyframes(timeline, t) {
   if (!Array.isArray(timeline) || timeline.length === 0) return [];
-  const result = [{ frameIndex: 0, label: "Step 0 | Start" }];
+  const result = [{ frameIndex: 0, label: t("playback.keyframeStart") }];
   let prevFailed = Number(timeline[0].failed_agents ?? 0);
 
   for (let idx = 1; idx < timeline.length; idx += 1) {
@@ -194,11 +209,13 @@ function buildPlaybackKeyframes(timeline) {
       continue;
     }
     const tags = [];
-    if (captures > 0) tags.push(`+${captures} cap`);
-    if (failedDelta > 0) tags.push(`+${failedDelta} fail`);
+    if (captures > 0) tags.push(t("playback.captureTag", { value: captures }));
+    if (failedDelta > 0) tags.push(t("playback.failTag", { value: failedDelta }));
     result.push({
       frameIndex: idx,
-      label: `Step ${row.step}${tags.length ? ` | ${tags.join(", ")}` : ""}`
+      label: tags.length
+        ? t("playback.keyframeLabel", { step: row.step, tags: tags.join(", ") })
+        : t("playback.keyframePlain", { step: row.step })
     });
     prevFailed = failed;
   }
@@ -209,6 +226,10 @@ function buildPlaybackKeyframes(timeline) {
 }
 
 function App() {
+  const [language, setLanguage] = useState(() => {
+    if (typeof window === "undefined") return "zh";
+    return resolveInitialLanguage(window.localStorage.getItem("mas_lang"));
+  });
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [runs, setRuns] = useState(20);
   const [loadingSim, setLoadingSim] = useState(false);
@@ -225,6 +246,12 @@ function App() {
   const [frameIndex, setFrameIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(1);
+  const [selectedStatMetric, setSelectedStatMetric] = useState("task_completion_rate");
+  const [selectedTradeoffScenario, setSelectedTradeoffScenario] =
+    useState("with_comm_normal");
+  const t = (key, vars) => translate(language, key, vars);
+  const strategyLabel = (value) => t(`strategy.${value}`);
+  const scenarioLabel = (value) => t(`scenario.${value}`);
 
   const metrics = simResult?.metrics ?? null;
   const history = Array.isArray(simResult?.history) ? simResult.history : [];
@@ -241,7 +268,7 @@ function App() {
     () => buildTrails(history, safeFrameIndex, trailLength),
     [history, safeFrameIndex, trailLength]
   );
-  const keyframes = useMemo(() => buildPlaybackKeyframes(timeline), [timeline]);
+  const keyframes = useMemo(() => buildPlaybackKeyframes(timeline, t), [timeline, t]);
   const selectedKeyframe = useMemo(
     () =>
       keyframes.some((item) => item.frameIndex === safeFrameIndex)
@@ -249,6 +276,11 @@ function App() {
         : "__current__",
     [keyframes, safeFrameIndex]
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("mas_lang", language);
+  }, [language]);
 
   useEffect(() => {
     if (!isPlaying || history.length === 0) return undefined;
@@ -268,27 +300,27 @@ function App() {
   const metricCards = useMemo(() => {
     if (!metrics) return [];
     return [
-      ["Completion", metrics.task_completion_rate],
-      ["Coverage", metrics.coverage_rate],
+      [t("metric.completion"), metrics.task_completion_rate],
+      [t("metric.coverage"), metrics.coverage_rate],
       [
-        "Completion Latency",
+        t("metric.completionLatency"),
         metrics.task_completion_latency ?? metrics.decision_response_time_steps
       ],
-      ["Info Age", metrics.average_information_age],
-      ["Collab Eff", metrics.collaboration_efficiency],
-      ["Conflicts", metrics.assignment_conflicts]
+      [t("metric.infoAge"), metrics.average_information_age],
+      [t("metric.collabEff"), metrics.collaboration_efficiency],
+      [t("metric.conflicts"), metrics.assignment_conflicts]
     ];
-  }, [metrics]);
+  }, [metrics, t]);
 
   const scenarioRows = useMemo(() => {
     const rows = Array.isArray(expResult?.rows) ? expResult.rows : [];
     return rows.map((row) => ({
       ...row,
-      scenario_label: SCENARIO_LABELS[row.scenario] ?? row.scenario,
+      scenario_label: scenarioLabel(row.scenario),
       completion_pct: Number(row.task_completion_rate ?? 0) * 100,
       coverage_pct: Number(row.coverage_rate ?? 0) * 100
     }));
-  }, [expResult]);
+  }, [expResult, scenarioLabel]);
 
   const strategyRows = useMemo(
     () => (Array.isArray(expResult?.strategy_rows) ? expResult.strategy_rows : []),
@@ -320,6 +352,31 @@ function App() {
       robustness: Number(robustness)
     }));
   }, [expResult]);
+
+  const strategyStatRows = useMemo(
+    () => buildStrategyStatRows(expResult?.strategy_stats ?? [], selectedStatMetric),
+    [expResult, selectedStatMetric]
+  );
+
+  const derivedComparisonRows = useMemo(
+    () => buildDerivedComparisonRows(expResult?.derived_metrics ?? {}),
+    [expResult]
+  );
+
+  const derivedCards = useMemo(
+    () => buildDerivedCards(expResult?.derived_metrics?.default_strategy ?? null),
+    [expResult]
+  );
+
+  const tradeoffRows = useMemo(
+    () => buildTradeoffScatterRows(expResult?.run_rows ?? []),
+    [expResult]
+  );
+
+  const filteredTradeoffRows = useMemo(
+    () => tradeoffRows.filter((row) => row.scenario === selectedTradeoffScenario),
+    [tradeoffRows, selectedTradeoffScenario]
+  );
 
   async function postJson(url, body) {
     const res = await fetch(url, {
@@ -358,7 +415,7 @@ function App() {
       const data = await postJson("/api/experiments", {
         config,
         runs,
-        strategies: STRATEGY_OPTIONS.map((item) => item.value)
+        strategies: STRATEGY_OPTIONS
       });
       setExpResult(data);
     } catch (e) {
@@ -433,6 +490,38 @@ function App() {
     );
   }
 
+  function exportStrategyStatsCsv() {
+    if (strategyStatRows.length === 0) return;
+    const headers = [
+      { key: "strategy", label: "strategy" },
+      { key: "scenario", label: "scenario" },
+      { key: "mean", label: "mean" },
+      { key: "std", label: "std" },
+      { key: "min", label: "min" },
+      { key: "median", label: "median" },
+      { key: "max", label: "max" },
+      { key: "ci95_low", label: "ci95_low" },
+      { key: "ci95_high", label: "ci95_high" }
+    ];
+    const csv = rowsToCsv(headers, strategyStatRows);
+    downloadText(`strategy_stats_${selectedStatMetric}_${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+  }
+
+  function exportRunRowsCsv() {
+    if (tradeoffRows.length === 0) return;
+    const headers = [
+      { key: "strategy", label: "strategy" },
+      { key: "scenario", label: "scenario" },
+      { key: "run_index", label: "run_index" },
+      { key: "messages_sent", label: "messages_sent" },
+      { key: "completion_pct", label: "completion_pct" },
+      { key: "conflicts", label: "conflicts" },
+      { key: "info_age", label: "info_age" }
+    ];
+    const csv = rowsToCsv(headers, tradeoffRows);
+    downloadText(`experiment_runs_${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+  }
+
   function handlePlayPause() {
     if (history.length === 0) return;
     if (!isPlaying && safeFrameIndex >= history.length - 1) {
@@ -474,19 +563,36 @@ function App() {
   return (
     <div className="page">
       <header className="header card">
-        <div>
-          <h1>Multi-Agent Situational Awareness</h1>
-          <p>
-            Enhanced world map for interpretation, compact timeline, and algorithm comparison
-            experiments.
+        <div className="header-copy">
+          <h1>{t("header.title")}</h1>
+          <p>{t("header.subtitle")}</p>
+          <p className="header-endpoints">
+            {t("header.endpoints", {
+              frontend: "127.0.0.1:5173",
+              backend: "127.0.0.1:8000"
+            })}
           </p>
         </div>
         <div className="header-actions">
+          <div className="lang-switch card-lite">
+            <button
+              className={`btn btn-sm ${language === "zh" ? "active" : ""}`}
+              onClick={() => setLanguage("zh")}
+            >
+              {t("lang.zh")}
+            </button>
+            <button
+              className={`btn btn-sm ${language === "en" ? "active" : ""}`}
+              onClick={() => setLanguage("en")}
+            >
+              {t("lang.en")}
+            </button>
+          </div>
           <button className="btn primary" onClick={runSimulation} disabled={loadingSim}>
-            {loadingSim ? "Running..." : "Run Simulation"}
+            {loadingSim ? t("action.running") : t("action.runSimulation")}
           </button>
           <button className="btn" onClick={runExperiments} disabled={loadingExp}>
-            {loadingExp ? "Running..." : "Run Experiments"}
+            {loadingExp ? t("action.running") : t("action.runExperiments")}
           </button>
         </div>
       </header>
@@ -495,9 +601,9 @@ function App() {
 
       <main className="layout">
         <aside className="sidebar card">
-          <h2>Configuration</h2>
+          <h2>{t("sidebar.configuration")}</h2>
           <label className="check-line">
-            <span>Enable Communication</span>
+            <span>{t("sidebar.enableCommunication")}</span>
             <input
               type="checkbox"
               checked={config.enable_communication}
@@ -505,25 +611,25 @@ function App() {
             />
           </label>
           <label className="field">
-            <span>Decision Strategy</span>
+            <span>{t("sidebar.decisionStrategy")}</span>
             <select
               value={config.decision_strategy}
               onChange={(e) => updateSelectField("decision_strategy", e.target.value)}
             >
-              {STRATEGY_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
+              {STRATEGY_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {strategyLabel(value)}
                 </option>
               ))}
             </select>
           </label>
 
           {FIELD_GROUPS.map((group) => (
-            <section key={group.title} className="group">
-              <h3>{group.title}</h3>
-              {group.fields.map(([key, label, type, min, max, step]) => (
+            <section key={group.titleKey} className="group">
+              <h3>{t(group.titleKey)}</h3>
+              {group.fields.map(([key, type, min, max, step]) => (
                 <label key={key} className="field">
-                  <span>{label}</span>
+                  <span>{t(`field.${key}`)}</span>
                   <input
                     type={type}
                     min={min}
@@ -538,9 +644,9 @@ function App() {
           ))}
 
           <section className="group">
-            <h3>Experiment</h3>
+            <h3>{t("sidebar.experiment")}</h3>
             <label className="field">
-              <span>Monte Carlo Runs</span>
+              <span>{t("sidebar.monteCarloRuns")}</span>
               <input
                 type="number"
                 min={3}
@@ -553,9 +659,9 @@ function App() {
           </section>
 
           <section className="group">
-            <h3>Map Layers</h3>
+            <h3>{t("sidebar.mapLayers")}</h3>
             <label className="check-line">
-              <span>Show Vision Range</span>
+              <span>{t("sidebar.showVision")}</span>
               <input
                 type="checkbox"
                 checked={showVision}
@@ -563,7 +669,7 @@ function App() {
               />
             </label>
             <label className="check-line">
-              <span>Show Agent Trails</span>
+              <span>{t("sidebar.showTrails")}</span>
               <input
                 type="checkbox"
                 checked={showTrails}
@@ -571,7 +677,7 @@ function App() {
               />
             </label>
             <label className="check-line">
-              <span>Show Agent Labels</span>
+              <span>{t("sidebar.showLabels")}</span>
               <input
                 type="checkbox"
                 checked={showLabels}
@@ -579,7 +685,7 @@ function App() {
               />
             </label>
             <label className="field">
-              <span>Trail Length</span>
+              <span>{t("sidebar.trailLength")}</span>
               <input
                 type="number"
                 min={4}
@@ -591,7 +697,7 @@ function App() {
             </label>
             {history.length > 0 && (
               <label className="field">
-                <span>Frame</span>
+                <span>{t("sidebar.frame")}</span>
                 <input
                   type="number"
                   min={0}
@@ -619,9 +725,9 @@ function App() {
 
           <section className="card chart-card">
             <div className="panel-title-row">
-              <h3>Final World (Enhanced)</h3>
+              <h3>{t("panel.finalWorld")}</h3>
               <button className="btn" onClick={exportTimelineCsv} disabled={timeline.length === 0}>
-                Export Timeline CSV
+                {t("action.exportTimelineCsv")}
               </button>
             </div>
             {displayWorld ? (
@@ -631,20 +737,24 @@ function App() {
                     <div className="playback-row">
                       <div className="playback-nav">
                         <button className="btn btn-sm" onClick={() => stepFrame(-1)}>
-                          Prev
+                          {t("action.prev")}
                         </button>
                         <button className="btn btn-sm primary" onClick={handlePlayPause}>
-                          {isPlaying ? "Pause" : "Play"}
+                          {isPlaying ? t("action.pause") : t("action.play")}
                         </button>
                         <button className="btn btn-sm" onClick={() => stepFrame(1)}>
-                          Next
+                          {t("action.next")}
                         </button>
                         <span className="playback-status">
-                          Frame {safeFrameIndex + 1}/{history.length} | Step {activeFrame?.step ?? 0}
+                          {t("playback.status", {
+                            current: safeFrameIndex + 1,
+                            total: history.length,
+                            step: activeFrame?.step ?? 0
+                          })}
                         </span>
                       </div>
                       <div className="playback-speed">
-                        <span>Speed</span>
+                        <span>{t("playback.speed")}</span>
                         {PLAY_SPEED_OPTIONS.map((speed) => (
                           <button
                             key={speed}
@@ -655,10 +765,10 @@ function App() {
                           </button>
                         ))}
                         <button className="btn btn-sm" onClick={() => setShowVision((v) => !v)}>
-                          {showVision ? "Hide Vision" : "Show Vision"}
+                          {showVision ? t("action.hideVision") : t("action.showVision")}
                         </button>
                         <button className="btn btn-sm" onClick={() => setShowTrails((v) => !v)}>
-                          {showTrails ? "Hide Trails" : "Show Trails"}
+                          {showTrails ? t("action.hideTrails") : t("action.showTrails")}
                         </button>
                       </div>
                     </div>
@@ -677,10 +787,10 @@ function App() {
                     <div className="playback-row playback-row-bottom">
                       <div className="playback-nav">
                         <button className="btn btn-sm" onClick={() => jumpKeyframe(-1)}>
-                          Prev Keyframe
+                          {t("action.prevKeyframe")}
                         </button>
                         <button className="btn btn-sm" onClick={() => jumpKeyframe(1)}>
-                          Next Keyframe
+                          {t("action.nextKeyframe")}
                         </button>
                       </div>
                       <select
@@ -692,7 +802,7 @@ function App() {
                           setFrameIndex(Number(e.target.value));
                         }}
                       >
-                        <option value="__current__">Current Frame</option>
+                        <option value="__current__">{t("playback.currentFrame")}</option>
                         {keyframes.map((item) => (
                           <option key={item.frameIndex} value={item.frameIndex}>
                             {item.label}
@@ -711,40 +821,53 @@ function App() {
                       showTrails={showTrails}
                       showLabels={showLabels}
                       trails={trails}
+                      t={t}
                       onHoverChange={setHoverInfo}
                     />
                   </div>
                   <div className="world-legend card-lite">
-                    <div className="world-legend-title">Map Legend</div>
-                    <LegendRow color="#0f172a" shape="square" label="Obstacle" desc="Blocked cells." />
-                    <LegendRow color="#f59e0b" shape="star" label="Hotspot" desc="Target-biased region." />
-                    <LegendRow color="#dc2626" shape="triangle" label="Active Target" desc="Pending target." />
-                    <LegendRow color="#16a34a" shape="dot" label="Completed Target" desc="Already handled." />
-                    <LegendRow color="#0ea5e9" shape="dot" label="Agent" desc="Active unit." />
-                    <LegendRow color="#64748b" shape="dot" label="Failed Agent" desc="Unavailable unit." />
-                    <LegendRow color="#7c3aed" shape="line" label="Agent Trail" desc="Recent movement path." />
-                    <LegendRow color="#0ea5e9" shape="ring" label="Vision Range" desc="Perception radius." />
+                    <div className="world-legend-title">{t("world.legend")}</div>
+                    <LegendRow color="#0f172a" shape="square" label={t("world.obstacle.label")} desc={t("world.obstacle.desc")} />
+                    <LegendRow color="#f59e0b" shape="star" label={t("world.hotspot.label")} desc={t("world.hotspot.desc")} />
+                    <LegendRow color="#dc2626" shape="triangle" label={t("world.activeTarget.label")} desc={t("world.activeTarget.desc")} />
+                    <LegendRow color="#16a34a" shape="dot" label={t("world.completedTarget.label")} desc={t("world.completedTarget.desc")} />
+                    <LegendRow color="#0ea5e9" shape="dot" label={t("world.agent.label")} desc={t("world.agent.desc")} />
+                    <LegendRow color="#64748b" shape="dot" label={t("world.failedAgent.label")} desc={t("world.failedAgent.desc")} />
+                    <LegendRow color="#7c3aed" shape="line" label={t("world.trail.label")} desc={t("world.trail.desc")} />
+                    <LegendRow color="#0ea5e9" shape="ring" label={t("world.vision.label")} desc={t("world.vision.desc")} />
                     <p className="world-note">
                       {history.length > 0
-                        ? `Frame ${safeFrameIndex + 1}/${history.length} (step ${activeFrame?.step ?? 0}).`
-                        : "No trajectory history yet."}
+                        ? t("world.frameNote", {
+                            current: safeFrameIndex + 1,
+                            total: history.length,
+                            step: activeFrame?.step ?? 0
+                          })
+                        : t("world.noHistory")}
                     </p>
-                    <p className="world-note">{hoverInfo || "Hover an agent/target for details."}</p>
+                    <p className="world-note">{hoverInfo || t("world.hoverHint")}</p>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="placeholder">Run simulation to render world map.</div>
+              <div className="placeholder">{t("placeholder.runSimulationFirst")}</div>
             )}
           </section>
 
           <section className="card chart-card timeline-card">
             <div className="panel-title-row">
-              <h3>Timeline (Compact)</h3>
+              <h3>{t("panel.timeline")}</h3>
               <div className="timeline-summary-inline">
-                <span>Steps {Number(metrics?.steps_used ?? 0).toFixed(0)}</span>
-                <span>Active {Number(timeline.at(-1)?.active_targets ?? 0).toFixed(0)}</span>
-                <span>Failed {Number(timeline.at(-1)?.failed_agents ?? 0).toFixed(0)}</span>
+                <span>{t("timeline.steps", { value: Number(metrics?.steps_used ?? 0).toFixed(0) })}</span>
+                <span>
+                  {t("timeline.active", {
+                    value: Number(timeline.at(-1)?.active_targets ?? 0).toFixed(0)
+                  })}
+                </span>
+                <span>
+                  {t("timeline.failed", {
+                    value: Number(timeline.at(-1)?.failed_agents ?? 0).toFixed(0)
+                  })}
+                </span>
               </div>
             </div>
             {timeline.length > 0 ? (
@@ -755,26 +878,47 @@ function App() {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Line type="monotone" dataKey="active_targets" stroke="#dc2626" strokeWidth={2} dot={false} name="Active Targets" />
-                  <Line type="monotone" dataKey="captures_per_step" stroke="#16a34a" strokeWidth={2} dot={false} name="Captures/Step" />
-                  <Line type="monotone" dataKey="failed_agents" stroke="#334155" strokeWidth={2} dot={false} name="Failed Agents" />
+                  <Line
+                    type="monotone"
+                    dataKey="active_targets"
+                    stroke="#dc2626"
+                    strokeWidth={2}
+                    dot={false}
+                    name={t("timeline.activeTargets")}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="captures_per_step"
+                    stroke="#16a34a"
+                    strokeWidth={2}
+                    dot={false}
+                    name={t("timeline.capturesPerStep")}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="failed_agents"
+                    stroke="#334155"
+                    strokeWidth={2}
+                    dot={false}
+                    name={t("timeline.failedAgents")}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="placeholder compact">Run simulation first.</div>
+              <div className="placeholder compact">{t("placeholder.runSimulationFirst")}</div>
             )}
           </section>
 
           <section className="panel-grid-2">
             <article className="card chart-card">
               <div className="panel-title-row">
-                <h3>Scenario Comparison</h3>
+                <h3>{t("panel.scenarioComparison")}</h3>
                 <div className="inline-actions">
                   <button className="btn btn-sm" onClick={exportScenarioSummaryCsv} disabled={scenarioRows.length === 0}>
-                    Export Summary CSV
+                    {t("action.exportSummaryCsv")}
                   </button>
                   <button className="btn btn-sm" onClick={exportExperimentJson} disabled={!expResult}>
-                    Export JSON
+                    {t("action.exportJson")}
                   </button>
                 </div>
               </div>
@@ -787,26 +931,27 @@ function App() {
                       <YAxis type="category" width={120} dataKey="scenario_label" />
                       <Tooltip formatter={(v, n) => [`${Number(v).toFixed(1)}%`, n]} />
                       <Legend />
-                      <Bar dataKey="completion_pct" name="Completion" fill="#0ea5e9" />
-                      <Bar dataKey="coverage_pct" name="Coverage" fill="#14b8a6" />
+                      <Bar dataKey="completion_pct" name={t("chart.completion")} fill="#0ea5e9" />
+                      <Bar dataKey="coverage_pct" name={t("chart.coverage")} fill="#14b8a6" />
                     </BarChart>
                   </ResponsiveContainer>
                   {expResult && (
                     <p className="robustness">
-                      Robustness Index: <strong>{Number(expResult.robustness_index ?? 0).toFixed(4)}</strong>
+                      {t("chart.robustness")}:{" "}
+                      <strong>{Number(expResult.robustness_index ?? 0).toFixed(4)}</strong>
                     </p>
                   )}
                 </>
               ) : (
-                <div className="placeholder compact">Run experiments first.</div>
+                <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
               )}
             </article>
 
             <article className="card chart-card">
               <div className="panel-title-row">
-                <h3>Strategy Comparison</h3>
+                <h3>{t("panel.strategyComparison")}</h3>
                 <button className="btn btn-sm" onClick={exportStrategyMatrixCsv} disabled={strategyRows.length === 0}>
-                  Export Matrix CSV
+                  {t("action.exportMatrixCsv")}
                 </button>
               </div>
               {strategyComparisonRows.length > 0 ? (
@@ -814,29 +959,248 @@ function App() {
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={strategyComparisonRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="strategy" />
+                      <XAxis dataKey="strategy" tickFormatter={strategyLabel} />
                       <YAxis domain={[0, 1]} tickFormatter={(v) => pct(v, 0)} />
                       <Tooltip formatter={(v, n) => [pct(v, 2), n]} />
                       <Legend />
-                      <Bar dataKey="with_comm_normal" name="Comm Normal" fill="#0ea5e9" />
-                      <Bar dataKey="without_comm_baseline" name="No Comm" fill="#64748b" />
-                      <Bar dataKey="with_comm_fault" name="Comm Fault" fill="#14b8a6" />
+                      <Bar
+                        dataKey="with_comm_normal"
+                        name={scenarioLabel("with_comm_normal")}
+                        fill="#0ea5e9"
+                      />
+                      <Bar
+                        dataKey="without_comm_baseline"
+                        name={scenarioLabel("without_comm_baseline")}
+                        fill="#64748b"
+                      />
+                      <Bar
+                        dataKey="with_comm_fault"
+                        name={scenarioLabel("with_comm_fault")}
+                        fill="#14b8a6"
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                   <ResponsiveContainer width="100%" height={170}>
                     <BarChart data={robustnessRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="strategy" />
+                      <XAxis dataKey="strategy" tickFormatter={strategyLabel} />
                       <YAxis domain={[0, "auto"]} />
-                      <Tooltip formatter={(v) => [Number(v).toFixed(4), "Robustness"]} />
-                      <Bar dataKey="robustness" name="Robustness" fill="#f97316" />
+                      <Tooltip formatter={(v) => [Number(v).toFixed(4), t("chart.robustness")]} />
+                      <Bar dataKey="robustness" name={t("chart.robustness")} fill="#f97316" />
                     </BarChart>
                   </ResponsiveContainer>
                 </>
               ) : (
-                <div className="placeholder compact">Run experiments first.</div>
+                <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
               )}
             </article>
+          </section>
+
+          <section className="panel-grid-2">
+            <article className="card chart-card">
+              <div className="panel-title-row">
+                <h3>{t("panel.statisticalSummary")}</h3>
+                <div className="inline-actions">
+                  <select
+                    className="panel-select"
+                    value={selectedStatMetric}
+                    onChange={(e) => setSelectedStatMetric(e.target.value)}
+                  >
+                    {STAT_METRIC_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {t(item.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn btn-sm"
+                    onClick={exportStrategyStatsCsv}
+                    disabled={strategyStatRows.length === 0}
+                  >
+                    {t("action.exportStatsCsv")}
+                  </button>
+                </div>
+              </div>
+              {strategyStatRows.length > 0 ? (
+                <>
+                  <p className="chart-note">{t("chart.statNote")}</p>
+                  <div className="table-wrap">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>{t("table.strategy")}</th>
+                          <th>{t("table.scenario")}</th>
+                          <th>{t("table.meanBand")}</th>
+                          <th>{t("table.min")}</th>
+                          <th>{t("table.median")}</th>
+                          <th>{t("table.max")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {strategyStatRows.map((row) => (
+                          <tr key={`${row.strategy}-${row.scenario}`}>
+                            <td>{strategyLabel(row.strategy)}</td>
+                            <td>{scenarioLabel(row.scenario)}</td>
+                            <td>{row.band}</td>
+                            <td>{row.min.toFixed(3)}</td>
+                            <td>{row.median.toFixed(3)}</td>
+                            <td>{row.max.toFixed(3)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
+              )}
+            </article>
+
+            <article className="card chart-card">
+              <div className="panel-title-row">
+                <h3>{t("panel.benefitCost")}</h3>
+                <button className="btn btn-sm" onClick={exportExperimentJson} disabled={!expResult}>
+                  {t("action.exportJson")}
+                </button>
+              </div>
+              {derivedComparisonRows.length > 0 ? (
+                <>
+                  <div className="insight-grid">
+                    {derivedCards.map((card) => (
+                      <article className="insight-card card-lite" key={card.key}>
+                        <div className="insight-label">{t(card.key)}</div>
+                        <div className="insight-value">{card.value}</div>
+                      </article>
+                    ))}
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={derivedComparisonRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="strategy" tickFormatter={strategyLabel} />
+                      <YAxis tickFormatter={(v) => `${v}%`} />
+                      <Tooltip formatter={(v, n) => [`${Number(v).toFixed(1)}%`, n]} />
+                      <Legend />
+                      <Bar dataKey="fault_retention_pct" name={t("chart.faultRetention")} fill="#0ea5e9" />
+                      <Bar dataKey="comm_gain_pct" name={t("chart.commGain")} fill="#14b8a6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="table-wrap compact-table">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>{t("table.strategy")}</th>
+                          <th>{t("table.msgCostNormal")}</th>
+                          <th>{t("table.msgCostFault")}</th>
+                          <th>{t("table.conflictCostFault")}</th>
+                          <th>{t("table.completionAgeNormal")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {derivedComparisonRows.map((row) => (
+                          <tr key={`derived-${row.strategy}`}>
+                            <td>{strategyLabel(row.strategy)}</td>
+                            <td>{Number(row.message_cost_per_success_normal ?? 0).toFixed(2)}</td>
+                            <td>{Number(row.message_cost_per_success_fault ?? 0).toFixed(2)}</td>
+                            <td>{Number(row.conflict_cost_per_success_fault ?? 0).toFixed(2)}</td>
+                            <td>{Number(row.completion_vs_age_ratio_normal ?? 0).toFixed(4)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
+              )}
+            </article>
+          </section>
+
+          <section className="card chart-card">
+            <div className="panel-title-row">
+              <h3>{t("panel.runTradeoff")}</h3>
+              <div className="inline-actions">
+                <select
+                  className="panel-select"
+                  value={selectedTradeoffScenario}
+                  onChange={(e) => setSelectedTradeoffScenario(e.target.value)}
+                >
+                  {SCENARIO_KEYS.map((value) => (
+                    <option key={value} value={value}>
+                      {scenarioLabel(value)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-sm"
+                  onClick={exportRunRowsCsv}
+                  disabled={tradeoffRows.length === 0}
+                >
+                  {t("action.exportRunCsv")}
+                </button>
+              </div>
+            </div>
+            {filteredTradeoffRows.length > 0 ? (
+              <>
+                <p className="chart-note">{t("chart.tradeoffNote")}</p>
+                <ResponsiveContainer width="100%" height={320}>
+                  <ScatterChart margin={{ top: 8, right: 12, left: 0, bottom: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      type="number"
+                      dataKey="messages_sent"
+                      name={t("axis.messagesSent")}
+                      label={{ value: t("axis.messagesSent"), position: "insideBottom", offset: -4 }}
+                    />
+                    <YAxis
+                      type="number"
+                      dataKey="completion_pct"
+                      name={t("axis.completionPct")}
+                      domain={[0, 100]}
+                      tickFormatter={(v) => `${v}%`}
+                      label={{ value: t("axis.completionPct"), angle: -90, position: "insideLeft" }}
+                    />
+                    <Tooltip
+                      cursor={{ strokeDasharray: "3 3" }}
+                      formatter={(value, name) => [
+                        name === "completion_pct" ? `${Number(value).toFixed(1)}%` : Number(value).toFixed(2),
+                        name
+                      ]}
+                      labelFormatter={() => ""}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null;
+                        const point = payload[0].payload;
+                        return (
+                          <div className="tooltip-card">
+                            <div>
+                              {t("tooltip.runLabel", {
+                                strategy: strategyLabel(point.strategy),
+                                scenario: scenarioLabel(point.scenario),
+                                run: point.run_index
+                              })}
+                            </div>
+                            <div>{t("tooltip.messages")}: {point.messages_sent}</div>
+                            <div>{t("tooltip.completion")}: {point.completion_pct.toFixed(1)}%</div>
+                            <div>{t("tooltip.conflicts")}: {point.conflicts}</div>
+                            <div>{t("tooltip.infoAge")}: {point.info_age.toFixed(2)}</div>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Legend formatter={(value) => strategyLabel(value)} />
+                    {STRATEGY_OPTIONS.map((option) => (
+                      <Scatter
+                        key={option}
+                        name={option}
+                        data={filteredTradeoffRows.filter((row) => row.strategy === option)}
+                        fill={STRATEGY_COLORS[option]}
+                      />
+                    ))}
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </>
+            ) : (
+              <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
+            )}
           </section>
         </section>
       </main>
@@ -863,6 +1227,7 @@ function WorldSvg({
   showTrails,
   showLabels,
   trails,
+  t,
   onHoverChange
 }) {
   const width = 780;
@@ -912,7 +1277,9 @@ function WorldSvg({
           r={Math.max(5, sx * 0.44)}
           fill="#f59e0b"
           opacity="0.76"
-          onMouseEnter={() => onHoverChange?.(`Hotspot (${p[0]}, ${p[1]})`)}
+          onMouseEnter={() =>
+            onHoverChange?.(t("world.hover.hotspot", { x: p[0], y: p[1] }))
+          }
         />
       ))}
 
@@ -923,7 +1290,9 @@ function WorldSvg({
           cy={height - (p.y + 0.5) * sy}
           r={Math.max(3, sx * 0.24)}
           fill="#16a34a"
-          onMouseEnter={() => onHoverChange?.(`Completed target (${p.x}, ${p.y})`)}
+          onMouseEnter={() =>
+            onHoverChange?.(t("world.hover.completedTarget", { x: p.x, y: p.y }))
+          }
         />
       ))}
 
@@ -932,7 +1301,9 @@ function WorldSvg({
           key={`at-${idx}`}
           points={`${(p.x + 0.5) * sx},${height - (p.y + 0.18) * sy} ${(p.x + 0.2) * sx},${height - (p.y + 0.82) * sy} ${(p.x + 0.8) * sx},${height - (p.y + 0.82) * sy}`}
           fill="#dc2626"
-          onMouseEnter={() => onHoverChange?.(`Active target (${p.x}, ${p.y})`)}
+          onMouseEnter={() =>
+            onHoverChange?.(t("world.hover.activeTarget", { x: p.x, y: p.y }))
+          }
         />
       ))}
 
@@ -960,9 +1331,12 @@ function WorldSvg({
               strokeWidth={1.2}
               onMouseEnter={() =>
                 onHoverChange?.(
-                  `Agent ${agent.id} | (${agent.x}, ${agent.y}) | ${
-                    agent.failed ? "failed" : "active"
-                  }`
+                  t("world.hover.agent", {
+                    id: agent.id,
+                    x: agent.x,
+                    y: agent.y,
+                    state: t(agent.failed ? "status.failed" : "status.active")
+                  })
                 )
               }
             />

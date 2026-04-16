@@ -1,5 +1,6 @@
 from dataclasses import asdict, replace
-from statistics import mean
+from math import sqrt
+from statistics import mean, median, stdev
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
@@ -9,6 +10,30 @@ import uvicorn
 
 from .config import SimulationConfig
 from .simulation import run_monte_carlo, run_simulation_detailed
+
+
+AGGREGATE_KEYS = [
+    "steps_used",
+    "task_completion_rate",
+    "collaboration_efficiency",
+    "task_completion_latency",
+    "decision_response_time_steps",
+    "messages_sent",
+    "messages_received",
+    "failed_agents",
+    "coverage_rate",
+    "average_information_age",
+    "assignment_conflicts",
+]
+
+STAT_KEYS = [
+    "task_completion_rate",
+    "task_completion_latency",
+    "coverage_rate",
+    "messages_sent",
+    "average_information_age",
+    "assignment_conflicts",
+]
 
 
 class SimulateRequest(BaseModel):
@@ -59,20 +84,75 @@ def _config_from_payload(payload: Dict[str, Any], record_history: bool) -> Simul
 
 
 def _aggregate(records: List[Dict[str, float]]) -> Dict[str, float]:
-    keys = [
-        "steps_used",
-        "task_completion_rate",
-        "collaboration_efficiency",
-        "task_completion_latency",
-        "decision_response_time_steps",
-        "messages_sent",
-        "messages_received",
-        "failed_agents",
-        "coverage_rate",
-        "average_information_age",
-        "assignment_conflicts",
-    ]
-    return {k: round(mean(r[k] for r in records), 4) for k in keys}
+    return {k: round(mean(r[k] for r in records), 4) for k in AGGREGATE_KEYS}
+
+
+def _safe_ratio(numerator: float, denominator: float) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(numerator / denominator, 4)
+
+
+def _completed_targets_estimate(summary: Dict[str, float], num_targets: int) -> float:
+    return float(summary.get("task_completion_rate", 0.0)) * max(1, int(num_targets))
+
+
+def _summarize_metric(records: List[Dict[str, float]], key: str) -> Dict[str, float]:
+    values = [float(record.get(key, 0.0)) for record in records]
+    if not values:
+        return {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "median": 0.0,
+            "max": 0.0,
+            "ci95_low": 0.0,
+            "ci95_high": 0.0,
+        }
+
+    mean_value = mean(values)
+    std_value = stdev(values) if len(values) > 1 else 0.0
+    ci_half_width = 1.96 * (std_value / sqrt(len(values))) if len(values) > 1 else 0.0
+    return {
+        "mean": round(mean_value, 4),
+        "std": round(std_value, 4),
+        "min": round(min(values), 4),
+        "median": round(median(values), 4),
+        "max": round(max(values), 4),
+        "ci95_low": round(mean_value - ci_half_width, 4),
+        "ci95_high": round(mean_value + ci_half_width, 4),
+    }
+
+
+def _build_strategy_stat(
+    strategy: str,
+    scenario: str,
+    records: List[Dict[str, float]],
+) -> Dict[str, Any]:
+    return {
+        "strategy": strategy,
+        "scenario": scenario,
+        "runs": len(records),
+        "metrics": {key: _summarize_metric(records, key) for key in STAT_KEYS},
+    }
+
+
+def _build_run_rows(
+    strategy: str,
+    scenario: str,
+    records: List[Dict[str, float]],
+) -> List[Dict[str, float]]:
+    rows: List[Dict[str, float]] = []
+    for run_index, record in enumerate(records):
+        rows.append(
+            {
+                "strategy": strategy,
+                "scenario": scenario,
+                "run_index": run_index,
+                **record,
+            }
+        )
+    return rows
 
 
 def _normalize_strategy(strategy: Any) -> str:
@@ -102,6 +182,58 @@ def _compute_robustness(rows: Dict[str, Dict[str, float]]) -> float:
     # Weighted robustness: prioritize fault-scene absolute completion and
     # keep retention as a secondary stability factor.
     return round(0.7 * fault + 0.3 * retention, 4)
+
+
+def _compute_derived_metrics(
+    rows: Dict[str, Dict[str, Dict[str, float]]],
+    num_targets: int,
+) -> Dict[str, List[Dict[str, float]]]:
+    by_strategy: List[Dict[str, float]] = []
+    for strategy, scenario_rows in rows.items():
+        normal = scenario_rows.get("with_comm_normal", {})
+        baseline = scenario_rows.get("without_comm_baseline", {})
+        fault = scenario_rows.get("with_comm_fault", {})
+
+        normal_completed = _completed_targets_estimate(normal, num_targets)
+        fault_completed = _completed_targets_estimate(fault, num_targets)
+
+        normal_completion = float(normal.get("task_completion_rate", 0.0))
+        baseline_completion = float(baseline.get("task_completion_rate", 0.0))
+        fault_completion = float(fault.get("task_completion_rate", 0.0))
+
+        by_strategy.append(
+            {
+                "strategy": strategy,
+                "fault_retention": _safe_ratio(fault_completion, normal_completion),
+                "comm_gain": round(normal_completion - baseline_completion, 4),
+                "message_cost_per_success_normal": _safe_ratio(
+                    float(normal.get("messages_sent", 0.0)),
+                    normal_completed,
+                ),
+                "message_cost_per_success_fault": _safe_ratio(
+                    float(fault.get("messages_sent", 0.0)),
+                    fault_completed,
+                ),
+                "conflict_cost_per_success_normal": _safe_ratio(
+                    float(normal.get("assignment_conflicts", 0.0)),
+                    normal_completed,
+                ),
+                "conflict_cost_per_success_fault": _safe_ratio(
+                    float(fault.get("assignment_conflicts", 0.0)),
+                    fault_completed,
+                ),
+                "completion_vs_age_ratio_normal": _safe_ratio(
+                    normal_completion,
+                    float(normal.get("average_information_age", 0.0)),
+                ),
+                "completion_vs_age_ratio_fault": _safe_ratio(
+                    fault_completion,
+                    float(fault.get("average_information_age", 0.0)),
+                ),
+            }
+        )
+
+    return {"by_strategy": by_strategy}
 
 
 app = FastAPI(title="MAS Simulation API", version="0.1.0")
@@ -201,6 +333,8 @@ def experiments(req: ExperimentRequest) -> Dict[str, Any]:
 
     by_strategy: Dict[str, Dict[str, Dict[str, float]]] = {}
     strategy_rows: List[Dict[str, Any]] = []
+    strategy_stats: List[Dict[str, Any]] = []
+    run_rows: List[Dict[str, Any]] = []
     for strategy in strategies:
         by_strategy[strategy] = {}
 
@@ -213,6 +347,8 @@ def experiments(req: ExperimentRequest) -> Dict[str, Any]:
             summary["scenario"] = scenario_name
             summary["strategy"] = strategy
             strategy_rows.append(summary)
+            strategy_stats.append(_build_strategy_stat(strategy, scenario_name, records))
+            run_rows.extend(_build_run_rows(strategy, scenario_name, records))
             by_strategy[strategy][scenario_name] = summary
 
     rows: List[Dict[str, Any]] = []
@@ -225,11 +361,20 @@ def experiments(req: ExperimentRequest) -> Dict[str, Any]:
         strategy: _compute_robustness(by_strategy[strategy]) for strategy in strategies
     }
     robustness_index = robustness_by_strategy.get(default_strategy, 0.0)
+    derived_metrics = _compute_derived_metrics(by_strategy, num_targets=base.num_targets)
+    default_derived = next(
+        (row for row in derived_metrics["by_strategy"] if row["strategy"] == default_strategy),
+        None,
+    )
+    derived_metrics["default_strategy"] = default_derived or {}
 
     return {
         "runs": runs,
         "rows": rows,
         "strategy_rows": strategy_rows,
+        "run_rows": run_rows,
+        "strategy_stats": strategy_stats,
+        "derived_metrics": derived_metrics,
         "robustness_index": robustness_index,
         "robustness_by_strategy": robustness_by_strategy,
         "default_strategy": default_strategy,
