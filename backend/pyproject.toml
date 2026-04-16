@@ -35,10 +35,5 @@ packages = ["src/mas_platform"]
 [tool.hatch.build.targets.sdist]
 include = [
   "src/mas_platform",
-  "run_demo.py",
-  "run_experiments.py",
-  "run_render.py",
-  "run_frontend.py",
-  "web",
   "README.md",
 ]

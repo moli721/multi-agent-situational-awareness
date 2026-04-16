@@ -14,6 +14,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+}
+
 body {
   margin: 0;
   color: var(--text);
@@ -24,6 +30,7 @@ body {
 }
 
 .page {
+  width: min(100%, 1580px);
   max-width: 1580px;
   margin: 0 auto;
   padding: clamp(12px, 2vw, 20px);
@@ -49,9 +56,12 @@ body {
   align-items: center;
   padding: 14px 16px;
   margin-bottom: 12px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .header-copy {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -130,6 +140,12 @@ body {
   display: grid;
   grid-template-columns: minmax(280px, 330px) minmax(0, 1fr);
   gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.layout > * {
+  min-width: 0;
 }
 
 .sidebar {
@@ -191,12 +207,22 @@ body {
   display: grid;
   grid-template-rows: auto auto auto 1fr;
   gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.content > * {
+  min-width: 0;
 }
 
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .metric {

@@ -1,88 +1,68 @@
 # Multi-Agent Situational Awareness Platform
 
-Single-source project README for this repository.
+This repository is organized into three top-level areas:
 
-## What This Project Is
-
-This is a simulation-first multi-agent situational awareness platform for a graduation thesis project.  
-The runnable system is under `app/` and includes:
-
-- Python simulation engine
-- FastAPI backend
-- React + Vite frontend
-- Experiment and tracking workflow for reproducible evaluation
-
-## Main Features
-
-- Dynamic 2D environment with obstacles, hotspots, and moving targets
-- Decentralized OODA-style agent loop
-- Communication constraints (range, delay, loss, bandwidth limit)
-- Scenario presets (`normal`, `no-comm`, `fault`)
-- Config-driven runs with YAML files
-- Run tracking with metadata (config hash, git info, runtime context)
-- PettingZoo Parallel API interoperability (MARL smoke test)
+- `backend/`: Python simulation engine, FastAPI backend, CLI, tests, and retained results
+- `frontend/`: React + Vite interface for simulation and experiment analysis
+- `docs/`: thesis materials, planning notes, and implementation specs
 
 ## Repository Layout
 
 ```text
 .
-|-- app/
-|   |-- configs/
+|-- backend/
 |   |-- src/mas_platform/
-|   |-- web/
-|   |-- run_demo.py
-|   |-- run_experiments.py
-|   |-- run_render.py
+|   |-- tests/
+|   |-- results/
 |   |-- pyproject.toml
-|   `-- uv.lock
-`-- thesis/
+|   |-- uv.lock
+|   `-- README.md
+|-- frontend/
+|   |-- src/
+|   |-- index.html
+|   |-- package.json
+|   |-- package-lock.json
+|   `-- vite.config.js
+|-- docs/
+|   |-- superpowers/
+|   |-- thesis/
+|   `-- worklog/
+|-- .gitignore
+`-- README.md
 ```
 
 ## Quick Start
 
-### 1) Backend
+### Backend
 
 ```bash
-cd app
+cd backend
 uv sync --extra api
 uv run mas-api
 ```
 
-Backend: `http://127.0.0.1:8000`
+Backend API: `http://127.0.0.1:8000`
 
-### 2) Frontend
+### Frontend
 
 ```bash
-cd app/web
+cd frontend
 npm install
 npm run dev
 ```
 
 Frontend: `http://127.0.0.1:5173`
 
-## Common Commands (run in `app/`)
+## Common Commands
+
+### In `backend/`
 
 ```bash
-uv run mas-demo
+uv run mas-api
 uv run mas-experiments
 uv run mas-experiments --runs 30 --strategies current,nearest,random
 uv run mas-render
-uv run mas-dump-config --out configs/default.generated.yaml
-```
-
-Config-based usage:
-
-```bash
-uv run python -m mas_platform demo --config configs/default.yaml --seed 2026
-uv run python -m mas_platform experiments --config configs/fault_heavy.yaml --runs 30
-uv run python -m mas_platform render --config configs/default.yaml
-```
-
-MARL smoke test:
-
-```bash
-uv sync --extra marl
-uv run mas-marl-smoke --steps 20
+uv run mas-frontend
 ```
 
 ## API
@@ -93,9 +73,15 @@ uv run mas-marl-smoke --steps 20
 - `POST /api/simulate`
 - `POST /api/experiments`
 
-## Outputs
+## Retained Outputs
 
-- `app/results/experiment_summary.csv`
-- `app/results/experiment_strategy_matrix.csv`
-- `app/results/experiment_report.md`
-- `app/results/runs/<timestamp>-<run_type>/`
+Current retained experiment outputs live in `backend/results/`, including:
+
+- `experiment_summary.csv`
+- `experiment_strategy_matrix.csv`
+- `experiment_runs_long.csv`
+- `experiment_report.md`
+- `experiment_manifest.json`
+- `experiment_completion_by_scenario.png`
+- `experiment_robustness_by_strategy.png`
+- `experiment_tradeoff_scatter.png`
