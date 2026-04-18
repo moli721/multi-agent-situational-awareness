@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   buildDerivedCards,
   buildDerivedComparisonRows,
@@ -19,12 +19,9 @@ import {
   STAT_METRIC_OPTIONS,
   STRATEGY_OPTIONS
 } from "./dashboardModel";
-import ControlRail from "./components/dashboard/ControlRail.jsx";
-import ExperimentDeck from "./components/dashboard/ExperimentDeck.jsx";
+import AnalysisPage from "./components/dashboard/AnalysisPage.jsx";
 import HeroHeader from "./components/dashboard/HeroHeader.jsx";
-import LiveInsightRail from "./components/dashboard/LiveInsightRail.jsx";
-import SimulationStage from "./components/dashboard/SimulationStage.jsx";
-import TimelineStrip from "./components/dashboard/TimelineStrip.jsx";
+import SimulationPage from "./components/dashboard/SimulationPage.jsx";
 
 function App() {
   const [language, setLanguage] = useState(() => {
@@ -50,6 +47,7 @@ function App() {
   const [selectedStatMetric, setSelectedStatMetric] = useState("task_completion_rate");
   const [selectedTradeoffScenario, setSelectedTradeoffScenario] =
     useState("with_comm_normal");
+  const [currentPage, setCurrentPage] = useState("simulation");
 
   const t = (key, vars) => translate(language, key, vars);
   const strategyLabel = (value) => t(`strategy.${value}`);
@@ -371,11 +369,13 @@ function App() {
   }
 
   return (
-    <div className="page command-stage-page">
+    <div className="page command-stage-page thesis-shell">
       <HeroHeader
         t={t}
         language={language}
         setLanguage={setLanguage}
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
         loadingSim={loadingSim}
         loadingExp={loadingExp}
         onRunSimulation={runSimulation}
@@ -385,8 +385,8 @@ function App() {
 
       {error ? <div className="error card">{error}</div> : null}
 
-      <main className="command-stage-grid">
-        <ControlRail
+      {currentPage === "simulation" ? (
+        <SimulationPage
           t={t}
           config={config}
           runs={runs}
@@ -407,74 +407,54 @@ function App() {
           onShowLabelsChange={setShowLabels}
           onTrailLengthChange={setTrailLength}
           onFrameIndexChange={handleFrameIndexChange}
-        />
-
-        <div className="stage-column">
-          <SimulationStage
-            t={t}
-            displayWorld={displayWorld}
-            timeline={timeline}
-            history={history}
-            metrics={metrics}
-            trails={trails}
-            simConfig={simConfig}
-            config={config}
-            safeFrameIndex={safeFrameIndex}
-            activeFrame={activeFrame}
-            isPlaying={isPlaying}
-            playSpeed={playSpeed}
-            selectedKeyframe={selectedKeyframe}
-            keyframes={keyframes}
-            showVision={showVision}
-            showTrails={showTrails}
-            showLabels={showLabels}
-            hoverInfo={hoverInfo}
-            onHoverChange={setHoverInfo}
-            onPlayPause={handlePlayPause}
-            onStepFrame={stepFrame}
-            onJumpKeyframe={jumpKeyframe}
-            onFrameIndexChange={handleFrameIndexChange}
-            onPlaySpeedChange={setPlaySpeed}
-            onToggleVision={() => setShowVision((v) => !v)}
-            onToggleTrails={() => setShowTrails((v) => !v)}
-            onExportTimelineCsv={exportTimelineCsv}
-          />
-
-          <TimelineStrip t={t} timeline={timeline} metrics={metrics} />
-        </div>
-
-        <LiveInsightRail
-          t={t}
-          metricCards={metricCards}
+          displayWorld={displayWorld}
+          timeline={timeline}
+          metrics={metrics}
+          trails={trails}
+          simConfig={simConfig}
+          activeFrame={activeFrame}
+          isPlaying={isPlaying}
+          playSpeed={playSpeed}
+          selectedKeyframe={selectedKeyframe}
+          keyframes={keyframes}
           hoverInfo={hoverInfo}
+          onHoverChange={setHoverInfo}
+          onPlayPause={handlePlayPause}
+          onStepFrame={stepFrame}
+          onJumpKeyframe={jumpKeyframe}
+          onPlaySpeedChange={setPlaySpeed}
+          onToggleVision={() => setShowVision((v) => !v)}
+          onToggleTrails={() => setShowTrails((v) => !v)}
+          onExportTimelineCsv={exportTimelineCsv}
+          metricCards={metricCards}
           expResult={expResult}
           derivedCards={derivedCards}
         />
-      </main>
-
-      <ExperimentDeck
-        t={t}
-        scenarioRows={scenarioRows}
-        strategyRows={strategyRows}
-        strategyComparisonRows={strategyComparisonRows}
-        robustnessRows={robustnessRows}
-        strategyStatRows={strategyStatRows}
-        derivedCards={derivedCards}
-        derivedComparisonRows={derivedComparisonRows}
-        filteredTradeoffRows={filteredTradeoffRows}
-        tradeoffRows={tradeoffRows}
-        selectedStatMetric={selectedStatMetric}
-        selectedTradeoffScenario={selectedTradeoffScenario}
-        scenarioLabel={scenarioLabel}
-        strategyLabel={strategyLabel}
-        onSelectedStatMetricChange={setSelectedStatMetric}
-        onSelectedTradeoffScenarioChange={setSelectedTradeoffScenario}
-        onExportScenarioSummaryCsv={exportScenarioSummaryCsv}
-        onExportExperimentJson={exportExperimentJson}
-        onExportStrategyMatrixCsv={exportStrategyMatrixCsv}
-        onExportStrategyStatsCsv={exportStrategyStatsCsv}
-        onExportRunRowsCsv={exportRunRowsCsv}
-      />
+      ) : (
+        <AnalysisPage
+          t={t}
+          scenarioRows={scenarioRows}
+          strategyRows={strategyRows}
+          strategyComparisonRows={strategyComparisonRows}
+          robustnessRows={robustnessRows}
+          strategyStatRows={strategyStatRows}
+          derivedCards={derivedCards}
+          derivedComparisonRows={derivedComparisonRows}
+          filteredTradeoffRows={filteredTradeoffRows}
+          tradeoffRows={tradeoffRows}
+          selectedStatMetric={selectedStatMetric}
+          selectedTradeoffScenario={selectedTradeoffScenario}
+          scenarioLabel={scenarioLabel}
+          strategyLabel={strategyLabel}
+          onSelectedStatMetricChange={setSelectedStatMetric}
+          onSelectedTradeoffScenarioChange={setSelectedTradeoffScenario}
+          onExportScenarioSummaryCsv={exportScenarioSummaryCsv}
+          onExportExperimentJson={exportExperimentJson}
+          onExportStrategyMatrixCsv={exportStrategyMatrixCsv}
+          onExportStrategyStatsCsv={exportStrategyStatsCsv}
+          onExportRunRowsCsv={exportRunRowsCsv}
+        />
+      )}
     </div>
   );
 }

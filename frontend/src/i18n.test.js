@@ -36,3 +36,9 @@ test("translate exposes new command stage copy", () => {
   assert.equal(translate("en", "timeline.kicker"), "Timeline Strip");
   assert.equal(translate("en", "controlRail.kicker"), "Control Rail");
 });
+
+test("translate exposes two-page thesis presentation copy", () => {
+  assert.equal(translate("en", "page.simulation"), "Simulation Presentation");
+  assert.equal(translate("en", "page.analysis"), "Experiment Analysis");
+  assert.equal(translate("en", "panel.simulationInfo"), "Simulation Info");
+});

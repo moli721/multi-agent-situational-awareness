@@ -123,8 +123,8 @@ export default function SimulationStage({
             </div>
           ) : null}
 
-          <div className="world-layout">
-            <div className="world-canvas">
+          <div className="world-layout world-layout-stage">
+            <div className="world-canvas stage-world-canvas">
               <WorldSvg
                 world={displayWorld}
                 visionRange={Number(simConfig?.vision_range ?? config?.vision_range)}
@@ -137,31 +137,41 @@ export default function SimulationStage({
               />
             </div>
 
-            <div className="world-legend card-lite">
+            <div className="world-support-band card-lite">
               <div className="world-legend-title">{t("world.legend")}</div>
-              <LegendRow color="#0f172a" shape="square" label={t("world.obstacle.label")} desc={t("world.obstacle.desc")} />
-              <LegendRow color="#f59e0b" shape="star" label={t("world.hotspot.label")} desc={t("world.hotspot.desc")} />
-              <LegendRow color="#dc2626" shape="triangle" label={t("world.activeTarget.label")} desc={t("world.activeTarget.desc")} />
-              <LegendRow color="#16a34a" shape="dot" label={t("world.completedTarget.label")} desc={t("world.completedTarget.desc")} />
-              <LegendRow color="#0ea5e9" shape="dot" label={t("world.agent.label")} desc={t("world.agent.desc")} />
-              <LegendRow color="#64748b" shape="dot" label={t("world.failedAgent.label")} desc={t("world.failedAgent.desc")} />
-              <LegendRow color="#7c3aed" shape="line" label={t("world.trail.label")} desc={t("world.trail.desc")} />
-              <LegendRow color="#0ea5e9" shape="ring" label={t("world.vision.label")} desc={t("world.vision.desc")} />
-              <p className="world-note">
-                {history.length > 0
-                  ? t("world.frameNote", {
-                      current: safeFrameIndex + 1,
-                      total: history.length,
-                      step: activeFrame?.step ?? 0
-                    })
-                  : t("world.noHistory")}
-              </p>
-              <p className="world-note">{hoverInfo || t("world.hoverHint")}</p>
+              <div className="world-legend-grid">
+                <LegendRow color="#0f172a" shape="square" label={t("world.obstacle.label")} desc={t("world.obstacle.desc")} />
+                <LegendRow color="#f59e0b" shape="star" label={t("world.hotspot.label")} desc={t("world.hotspot.desc")} />
+                <LegendRow color="#dc2626" shape="triangle" label={t("world.activeTarget.label")} desc={t("world.activeTarget.desc")} />
+                <LegendRow color="#16a34a" shape="dot" label={t("world.completedTarget.label")} desc={t("world.completedTarget.desc")} />
+                <LegendRow color="#0ea5e9" shape="dot" label={t("world.agent.label")} desc={t("world.agent.desc")} />
+                <LegendRow color="#64748b" shape="dot" label={t("world.failedAgent.label")} desc={t("world.failedAgent.desc")} />
+                <LegendRow color="#7c3aed" shape="line" label={t("world.trail.label")} desc={t("world.trail.desc")} />
+                <LegendRow color="#0ea5e9" shape="ring" label={t("world.vision.label")} desc={t("world.vision.desc")} />
+              </div>
+              <div className="world-note-stack">
+                <p className="world-note">
+                  {history.length > 0
+                    ? t("world.frameNote", {
+                        current: safeFrameIndex + 1,
+                        total: history.length,
+                        step: activeFrame?.step ?? 0
+                      })
+                    : t("world.noHistory")}
+                </p>
+                <p className="world-note">{hoverInfo || t("world.hoverHint")}</p>
+              </div>
             </div>
           </div>
         </>
       ) : (
-        <div className="placeholder">{t("placeholder.runSimulationFirst")}</div>
+        <div className="stage-empty-state">
+          <div className="stage-empty-graphic" />
+          <div className="stage-empty-copy">
+            <h4>{t("panel.finalWorld")}</h4>
+            <p>{t("placeholder.simulationGuide")}</p>
+          </div>
+        </div>
       )}
     </SectionShell>
   );

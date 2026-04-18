@@ -36,14 +36,17 @@ export default function ExperimentDeck({
   onExportExperimentJson,
   onExportStrategyMatrixCsv,
   onExportStrategyStatsCsv,
-  onExportRunRowsCsv
+  onExportRunRowsCsv,
+  showHeader = true
 }) {
   return (
     <section className="experiment-deck">
-      <div className="experiment-deck-header">
-        <p className="section-shell-label">{t("deck.kicker")}</p>
-        <h2>{t("deck.title")}</h2>
-      </div>
+      {showHeader ? (
+        <div className="experiment-deck-header">
+          <p className="section-shell-label">{t("deck.kicker")}</p>
+          <h2>{t("deck.title")}</h2>
+        </div>
+      ) : null}
 
       <div className="panel-grid-2">
         <SectionShell

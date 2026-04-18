@@ -9,13 +9,20 @@ function formatMetricValue(value) {
   return value.toFixed(3);
 }
 
-export default function LiveInsightRail({ t, metricCards = [], hoverInfo, expResult, derivedCards = [] }) {
+export default function LiveInsightRail({
+  t,
+  metricCards = [],
+  hoverInfo,
+  expResult,
+  derivedCards = [],
+  summaryTitleKey = "insight.stageSummary"
+}) {
   return (
     <aside className="live-insight-rail">
       <SectionShell
         className="stage-insight-card card"
         label={t("insight.liveTitle")}
-        title={t("insight.stageSummary")}
+        title={t(summaryTitleKey)}
       >
         <div className="live-insight-grid">
           {metricCards.slice(0, 4).map(([label, value], idx) => (

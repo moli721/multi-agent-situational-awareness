@@ -6,6 +6,7 @@ export const messages = {
     "header.subtitle": "增强世界地图、紧凑时间线与多策略实验分析。",
     "header.endpoints": "前端入口：{frontend}；后端 API：{backend}。",
     "hero.kicker": "MAS 研究控制台",
+    "hero.metricHint": "运行仿真后，这里会显示关键指标摘要。",
     "stage.kicker": "仿真主舞台",
     "deck.kicker": "实验分析",
     "deck.title": "实验分析甲板",
@@ -18,6 +19,9 @@ export const messages = {
 
     "lang.zh": "中文",
     "lang.en": "EN",
+    "page.navigation": "页面导航",
+    "page.simulation": "仿真展示",
+    "page.analysis": "实验分析",
 
     "action.runSimulation": "运行仿真",
     "action.runExperiments": "运行实验",
@@ -92,12 +96,19 @@ export const messages = {
     "metric.conflicts": "冲突数",
 
     "panel.finalWorld": "最终态势视图",
+    "panel.simulationInfo": "运行信息",
     "panel.timeline": "时间线",
     "panel.scenarioComparison": "场景对比",
     "panel.strategyComparison": "策略对比",
     "panel.statisticalSummary": "统计摘要",
     "panel.benefitCost": "收益-代价视图",
     "panel.runTradeoff": "逐 Run 权衡散点",
+    "analysis.summaryTitle": "实验分析总览",
+    "analysis.summaryNote": "集中展示场景对比、策略表现与收益代价关系，便于论文截图和答辩讲解。",
+    "analysis.summaryScenarios": "场景数",
+    "analysis.summaryStrategies": "策略数",
+    "analysis.summaryRuns": "运行样本",
+    "analysis.exportLabel": "数据导出",
 
     "timeline.steps": "步数 {value}",
     "timeline.active": "剩余目标 {value}",
@@ -183,6 +194,7 @@ export const messages = {
     "tooltip.runLabel": "{strategy} | {scenario} | run {run}",
 
     "placeholder.runSimulationFirst": "请先运行仿真。",
+    "placeholder.simulationGuide": "从左侧调整参数后运行仿真，这里会生成放大的终态势视图与时间线。",
     "placeholder.runExperimentsFirst": "请先运行实验。"
   },
   en: {
@@ -190,6 +202,7 @@ export const messages = {
     "header.subtitle": "Enhanced world map, compact timeline, and multi-strategy experiment analysis.",
     "header.endpoints": "Frontend: {frontend}; Backend API: {backend}.",
     "hero.kicker": "MAS Research Console",
+    "hero.metricHint": "Run a simulation to surface the headline metrics here.",
     "stage.kicker": "Simulation Stage",
     "deck.kicker": "Experiment Analytics",
     "deck.title": "Experiment Deck",
@@ -202,6 +215,9 @@ export const messages = {
 
     "lang.zh": "中文",
     "lang.en": "EN",
+    "page.navigation": "Page Navigation",
+    "page.simulation": "Simulation Presentation",
+    "page.analysis": "Experiment Analysis",
 
     "action.runSimulation": "Run Simulation",
     "action.runExperiments": "Run Experiments",
@@ -276,12 +292,19 @@ export const messages = {
     "metric.conflicts": "Conflicts",
 
     "panel.finalWorld": "Final World",
+    "panel.simulationInfo": "Simulation Info",
     "panel.timeline": "Timeline",
     "panel.scenarioComparison": "Scenario Comparison",
     "panel.strategyComparison": "Strategy Comparison",
     "panel.statisticalSummary": "Statistical Summary",
     "panel.benefitCost": "Benefit-Cost View",
     "panel.runTradeoff": "Run-Level Tradeoff",
+    "analysis.summaryTitle": "Experiment Analysis Board",
+    "analysis.summaryNote": "Collect scenario comparison, strategy performance, and benefit-cost evidence in a thesis-friendly analysis page.",
+    "analysis.summaryScenarios": "Scenarios",
+    "analysis.summaryStrategies": "Strategies",
+    "analysis.summaryRuns": "Run Samples",
+    "analysis.exportLabel": "Exports",
 
     "timeline.steps": "Steps {value}",
     "timeline.active": "Active {value}",
@@ -367,6 +390,7 @@ export const messages = {
     "tooltip.runLabel": "{strategy} | {scenario} | run {run}",
 
     "placeholder.runSimulationFirst": "Run simulation first.",
+    "placeholder.simulationGuide": "Adjust parameters on the left and run a simulation to generate the enlarged final-world view and timeline.",
     "placeholder.runExperimentsFirst": "Run experiments first."
   }
 };
