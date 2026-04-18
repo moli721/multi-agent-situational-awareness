@@ -21,10 +21,24 @@ test("resolveInitialLanguage defaults to zh when no saved value exists", () => {
 });
 
 test("translate resolves keys and interpolates vars", () => {
-  assert.equal(translate("zh", "header.title"), "多智能体态势感知平台");
   assert.equal(translate("en", "header.title"), "Multi-Agent Situational Awareness");
   assert.equal(
-    translate("zh", "header.endpoints", { frontend: "5173", backend: "8000" }),
-    "前端入口：5173；后端 API：8000。"
+    translate("en", "header.endpoints", { frontend: "5173", backend: "8000" }),
+    "Frontend: 5173; Backend API: 8000."
   );
+});
+
+test("translate exposes new command stage copy", () => {
+  assert.equal(translate("en", "hero.kicker"), "MAS Research Console");
+  assert.equal(translate("en", "stage.kicker"), "Simulation Stage");
+  assert.equal(translate("en", "deck.title"), "Experiment Deck");
+  assert.equal(translate("en", "insight.liveTitle"), "Live Insights");
+  assert.equal(translate("en", "timeline.kicker"), "Timeline Strip");
+  assert.equal(translate("en", "controlRail.kicker"), "Control Rail");
+});
+
+test("translate exposes two-page thesis presentation copy", () => {
+  assert.equal(translate("en", "page.simulation"), "Simulation Presentation");
+  assert.equal(translate("en", "page.analysis"), "Experiment Analysis");
+  assert.equal(translate("en", "panel.simulationInfo"), "Simulation Info");
 });

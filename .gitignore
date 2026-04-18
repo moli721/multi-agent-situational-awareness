@@ -22,6 +22,9 @@ backend/results/
 # Local browser traces
 .playwright-mcp/
 **/.playwright-mcp/
+.superpowers/
+.worktrees/
+worktrees/
 
 # Frontend
 frontend/node_modules/

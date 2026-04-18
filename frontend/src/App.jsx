@@ -1,18 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Scatter,
-  ScatterChart,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   buildDerivedCards,
   buildDerivedComparisonRows,
@@ -20,210 +6,22 @@ import {
   buildTradeoffScatterRows
 } from "./experimentInsights";
 import { resolveInitialLanguage, translate } from "./i18n";
-
-const STRATEGY_OPTIONS = ["current", "nearest", "random"];
-const SCENARIO_KEYS = ["with_comm_normal", "without_comm_baseline", "with_comm_fault"];
-
-const STRATEGY_COLORS = {
-  current: "#0ea5e9",
-  nearest: "#14b8a6",
-  random: "#f97316"
-};
-
-const STAT_METRIC_OPTIONS = [
-  { value: "task_completion_rate", labelKey: "statMetric.task_completion_rate" },
-  { value: "task_completion_latency", labelKey: "statMetric.task_completion_latency" },
-  { value: "coverage_rate", labelKey: "statMetric.coverage_rate" },
-  { value: "messages_sent", labelKey: "statMetric.messages_sent" },
-  { value: "average_information_age", labelKey: "statMetric.average_information_age" },
-  { value: "assignment_conflicts", labelKey: "statMetric.assignment_conflicts" }
-];
-
-const PLAY_SPEED_OPTIONS = [0.5, 1, 2, 4];
-
-const DEFAULT_CONFIG = {
-  random_seed: 2026,
-  width: 42,
-  height: 42,
-  num_agents: 12,
-  num_targets: 14,
-  num_obstacles: 70,
-  max_steps: 160,
-  vision_range: 3,
-  comm_range: 8,
-  enable_communication: true,
-  sense_miss_prob: 0.15,
-  packet_loss_prob: 0,
-  comm_delay_steps: 1,
-  target_move_prob: 0.08,
-  target_hotspot_bias: 0.7,
-  agent_failure_prob: 0.0,
-  fault_injection_start: 40,
-  min_tracking_confidence: 0.25,
-  belief_decay: 0.08,
-  max_shared_targets: 6,
-  owner_hint_penalty: 0.3,
-  decision_strategy: "current"
-};
-
-const FIELD_GROUPS = [
-  {
-    titleKey: "group.world",
-    fields: [
-      ["random_seed", "number", 1, 999999, 1],
-      ["width", "number", 20, 80, 1],
-      ["height", "number", 20, 80, 1],
-      ["num_agents", "number", 4, 40, 1],
-      ["num_targets", "number", 4, 40, 1],
-      ["num_obstacles", "number", 0, 220, 1],
-      ["max_steps", "number", 40, 500, 1]
-    ]
-  },
-  {
-    titleKey: "group.perceptionComm",
-    fields: [
-      ["vision_range", "number", 1, 12, 1],
-      ["comm_range", "number", 1, 20, 1],
-      ["sense_miss_prob", "number", 0, 0.9, 0.01],
-      ["packet_loss_prob", "number", 0, 0.95, 0.01],
-      ["comm_delay_steps", "number", 0, 10, 1],
-      ["max_shared_targets", "number", 1, 30, 1]
-    ]
-  },
-  {
-    titleKey: "group.dynamics",
-    fields: [
-      ["target_move_prob", "number", 0, 0.9, 0.01],
-      ["target_hotspot_bias", "number", 0, 1, 0.01],
-      ["agent_failure_prob", "number", 0, 0.2, 0.001],
-      ["fault_injection_start", "number", 0, 500, 1],
-      ["min_tracking_confidence", "number", 0.05, 0.95, 0.01],
-      ["belief_decay", "number", 0, 0.5, 0.01],
-      ["owner_hint_penalty", "number", 0, 1, 0.01]
-    ]
-  }
-];
-
-function pct(v, digits = 1) {
-  return `${(Number(v) * 100).toFixed(digits)}%`;
-}
-
-function downloadText(filename, content, mime = "text/plain;charset=utf-8") {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
-function rowsToCsv(headers, rows) {
-  const esc = (value) => {
-    const text = String(value ?? "");
-    if (text.includes(",") || text.includes('"') || text.includes("\n")) {
-      return `"${text.replace(/"/g, '""')}"`;
-    }
-    return text;
-  };
-  const lines = [
-    headers.map((h) => esc(h.label)).join(","),
-    ...rows.map((row) => headers.map((h) => esc(row[h.key])).join(","))
-  ];
-  return lines.join("\n");
-}
-
-function buildWorldFromFrame(frame, config) {
-  if (!frame || !config) return null;
-  const agents = Object.entries(frame.agents ?? {}).map(([id, payload]) => ({
-    id: Number(id),
-    x: payload.pos?.[0] ?? 0,
-    y: payload.pos?.[1] ?? 0,
-    failed: Boolean(payload.failed)
-  }));
-
-  const targets = Object.values(frame.targets ?? {});
-  const activeTargets = targets
-    .filter((item) => item.active)
-    .map((item) => ({ x: item.pos?.[0] ?? 0, y: item.pos?.[1] ?? 0 }));
-  const completedTargets = targets
-    .filter((item) => !item.active)
-    .map((item) => ({ x: item.pos?.[0] ?? 0, y: item.pos?.[1] ?? 0 }));
-
-  return {
-    width: Number(config.width),
-    height: Number(config.height),
-    obstacles: Array.isArray(frame.obstacles) ? frame.obstacles : [],
-    hotspots: Array.isArray(frame.hotspots) ? frame.hotspots : [],
-    agents,
-    active_targets: activeTargets,
-    completed_targets: completedTargets
-  };
-}
-
-function buildTrails(history, frameIndex, trailLength) {
-  const trails = new Map();
-  if (!Array.isArray(history) || history.length === 0) return trails;
-  const end = Math.max(0, Math.min(frameIndex, history.length - 1));
-  const start = Math.max(0, end - Math.max(1, trailLength) + 1);
-  for (let i = start; i <= end; i += 1) {
-    const frame = history[i];
-    for (const [id, payload] of Object.entries(frame.agents ?? {})) {
-      if (!trails.has(id)) trails.set(id, []);
-      trails.get(id).push({ x: payload.pos?.[0] ?? 0, y: payload.pos?.[1] ?? 0 });
-    }
-  }
-  return trails;
-}
-
-function enrichTimeline(timeline) {
-  if (!Array.isArray(timeline) || timeline.length === 0) return [];
-  let prevActive = Number(timeline[0].active_targets ?? 0);
-  return timeline.map((row, idx) => {
-    const active = Number(row.active_targets ?? 0);
-    const captures = idx === 0 ? 0 : Math.max(0, prevActive - active);
-    prevActive = active;
-    return {
-      ...row,
-      captures_per_step:
-        row.captures_per_step === undefined ? captures : Number(row.captures_per_step)
-    };
-  });
-}
-
-function buildPlaybackKeyframes(timeline, t) {
-  if (!Array.isArray(timeline) || timeline.length === 0) return [];
-  const result = [{ frameIndex: 0, label: t("playback.keyframeStart") }];
-  let prevFailed = Number(timeline[0].failed_agents ?? 0);
-
-  for (let idx = 1; idx < timeline.length; idx += 1) {
-    const row = timeline[idx];
-    const captures = Number(row.captures_per_step ?? 0);
-    const failed = Number(row.failed_agents ?? 0);
-    const failedDelta = Math.max(0, failed - prevFailed);
-    const isLast = idx === timeline.length - 1;
-    if (!isLast && captures <= 0 && failedDelta <= 0) {
-      prevFailed = failed;
-      continue;
-    }
-    const tags = [];
-    if (captures > 0) tags.push(t("playback.captureTag", { value: captures }));
-    if (failedDelta > 0) tags.push(t("playback.failTag", { value: failedDelta }));
-    result.push({
-      frameIndex: idx,
-      label: tags.length
-        ? t("playback.keyframeLabel", { step: row.step, tags: tags.join(", ") })
-        : t("playback.keyframePlain", { step: row.step })
-    });
-    prevFailed = failed;
-  }
-
-  const dedup = new Map();
-  for (const item of result) dedup.set(item.frameIndex, item);
-  return Array.from(dedup.values()).sort((a, b) => a.frameIndex - b.frameIndex);
-}
+import {
+  buildPlaybackKeyframes,
+  buildTrails,
+  buildWorldFromFrame,
+  DEFAULT_CONFIG,
+  downloadText,
+  enrichTimeline,
+  FIELD_GROUPS,
+  rowsToCsv,
+  SCENARIO_KEYS,
+  STAT_METRIC_OPTIONS,
+  STRATEGY_OPTIONS
+} from "./dashboardModel";
+import AnalysisPage from "./components/dashboard/AnalysisPage.jsx";
+import HeroHeader from "./components/dashboard/HeroHeader.jsx";
+import SimulationPage from "./components/dashboard/SimulationPage.jsx";
 
 function App() {
   const [language, setLanguage] = useState(() => {
@@ -249,6 +47,8 @@ function App() {
   const [selectedStatMetric, setSelectedStatMetric] = useState("task_completion_rate");
   const [selectedTradeoffScenario, setSelectedTradeoffScenario] =
     useState("with_comm_normal");
+  const [currentPage, setCurrentPage] = useState("simulation");
+
   const t = (key, vars) => translate(language, key, vars);
   const strategyLabel = (value) => t(`strategy.${value}`);
   const scenarioLabel = (value) => t(`scenario.${value}`);
@@ -397,8 +197,7 @@ function App() {
     try {
       const data = await postJson("/api/simulate", { config });
       setSimResult(data);
-      const frames = Array.isArray(data?.history) ? data.history.length : 0;
-      setFrameIndex(frames > 0 ? 0 : 0);
+      setFrameIndex(0);
       setIsPlaying(false);
       setHoverInfo("");
     } catch (e) {
@@ -504,7 +303,11 @@ function App() {
       { key: "ci95_high", label: "ci95_high" }
     ];
     const csv = rowsToCsv(headers, strategyStatRows);
-    downloadText(`strategy_stats_${selectedStatMetric}_${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+    downloadText(
+      `strategy_stats_${selectedStatMetric}_${Date.now()}.csv`,
+      csv,
+      "text/csv;charset=utf-8"
+    );
   }
 
   function exportRunRowsCsv() {
@@ -560,795 +363,99 @@ function App() {
     setFrameIndex(Math.max(0, history.length - 1));
   }
 
+  function handleFrameIndexChange(nextFrameIndex) {
+    setIsPlaying(false);
+    setFrameIndex(nextFrameIndex);
+  }
+
   return (
-    <div className="page">
-      <header className="header card">
-        <div className="header-copy">
-          <h1>{t("header.title")}</h1>
-          <p>{t("header.subtitle")}</p>
-          <p className="header-endpoints">
-            {t("header.endpoints", {
-              frontend: "127.0.0.1:5173",
-              backend: "127.0.0.1:8000"
-            })}
-          </p>
-        </div>
-        <div className="header-actions">
-          <div className="lang-switch card-lite">
-            <button
-              className={`btn btn-sm ${language === "zh" ? "active" : ""}`}
-              onClick={() => setLanguage("zh")}
-            >
-              {t("lang.zh")}
-            </button>
-            <button
-              className={`btn btn-sm ${language === "en" ? "active" : ""}`}
-              onClick={() => setLanguage("en")}
-            >
-              {t("lang.en")}
-            </button>
-          </div>
-          <button className="btn primary" onClick={runSimulation} disabled={loadingSim}>
-            {loadingSim ? t("action.running") : t("action.runSimulation")}
-          </button>
-          <button className="btn" onClick={runExperiments} disabled={loadingExp}>
-            {loadingExp ? t("action.running") : t("action.runExperiments")}
-          </button>
-        </div>
-      </header>
+    <div className="page command-stage-page thesis-shell">
+      <HeroHeader
+        t={t}
+        language={language}
+        setLanguage={setLanguage}
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        loadingSim={loadingSim}
+        loadingExp={loadingExp}
+        onRunSimulation={runSimulation}
+        onRunExperiments={runExperiments}
+        metricCards={metricCards}
+      />
 
-      {error && <div className="error card">{error}</div>}
+      {error ? <div className="error card">{error}</div> : null}
 
-      <main className="layout">
-        <aside className="sidebar card">
-          <h2>{t("sidebar.configuration")}</h2>
-          <label className="check-line">
-            <span>{t("sidebar.enableCommunication")}</span>
-            <input
-              type="checkbox"
-              checked={config.enable_communication}
-              onChange={(e) => updateField("enable_communication", e.target.checked, true)}
-            />
-          </label>
-          <label className="field">
-            <span>{t("sidebar.decisionStrategy")}</span>
-            <select
-              value={config.decision_strategy}
-              onChange={(e) => updateSelectField("decision_strategy", e.target.value)}
-            >
-              {STRATEGY_OPTIONS.map((value) => (
-                <option key={value} value={value}>
-                  {strategyLabel(value)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {FIELD_GROUPS.map((group) => (
-            <section key={group.titleKey} className="group">
-              <h3>{t(group.titleKey)}</h3>
-              {group.fields.map(([key, type, min, max, step]) => (
-                <label key={key} className="field">
-                  <span>{t(`field.${key}`)}</span>
-                  <input
-                    type={type}
-                    min={min}
-                    max={max}
-                    step={step}
-                    value={config[key]}
-                    onChange={(e) => updateField(key, e.target.value)}
-                  />
-                </label>
-              ))}
-            </section>
-          ))}
-
-          <section className="group">
-            <h3>{t("sidebar.experiment")}</h3>
-            <label className="field">
-              <span>{t("sidebar.monteCarloRuns")}</span>
-              <input
-                type="number"
-                min={3}
-                max={120}
-                step={1}
-                value={runs}
-                onChange={(e) => setRuns(Number(e.target.value))}
-              />
-            </label>
-          </section>
-
-          <section className="group">
-            <h3>{t("sidebar.mapLayers")}</h3>
-            <label className="check-line">
-              <span>{t("sidebar.showVision")}</span>
-              <input
-                type="checkbox"
-                checked={showVision}
-                onChange={(e) => setShowVision(e.target.checked)}
-              />
-            </label>
-            <label className="check-line">
-              <span>{t("sidebar.showTrails")}</span>
-              <input
-                type="checkbox"
-                checked={showTrails}
-                onChange={(e) => setShowTrails(e.target.checked)}
-              />
-            </label>
-            <label className="check-line">
-              <span>{t("sidebar.showLabels")}</span>
-              <input
-                type="checkbox"
-                checked={showLabels}
-                onChange={(e) => setShowLabels(e.target.checked)}
-              />
-            </label>
-            <label className="field">
-              <span>{t("sidebar.trailLength")}</span>
-              <input
-                type="number"
-                min={4}
-                max={500}
-                step={1}
-                value={trailLength}
-                onChange={(e) => setTrailLength(Number(e.target.value))}
-              />
-            </label>
-            {history.length > 0 && (
-              <label className="field">
-                <span>{t("sidebar.frame")}</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={Math.max(0, history.length - 1)}
-                  step={1}
-                  value={safeFrameIndex}
-                  onChange={(e) => setFrameIndex(Number(e.target.value))}
-                />
-              </label>
-            )}
-          </section>
-        </aside>
-
-        <section className="content">
-          <div className="metrics-grid">
-            {metricCards.map(([name, value]) => (
-              <article className="metric card" key={name}>
-                <div className="metric-name">{name}</div>
-                <div className="metric-value">
-                  {typeof value === "number" ? value.toFixed(3) : "-"}
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <section className="card chart-card">
-            <div className="panel-title-row">
-              <h3>{t("panel.finalWorld")}</h3>
-              <button className="btn" onClick={exportTimelineCsv} disabled={timeline.length === 0}>
-                {t("action.exportTimelineCsv")}
-              </button>
-            </div>
-            {displayWorld ? (
-              <>
-                {history.length > 0 && (
-                  <div className="playback-panel card-lite">
-                    <div className="playback-row">
-                      <div className="playback-nav">
-                        <button className="btn btn-sm" onClick={() => stepFrame(-1)}>
-                          {t("action.prev")}
-                        </button>
-                        <button className="btn btn-sm primary" onClick={handlePlayPause}>
-                          {isPlaying ? t("action.pause") : t("action.play")}
-                        </button>
-                        <button className="btn btn-sm" onClick={() => stepFrame(1)}>
-                          {t("action.next")}
-                        </button>
-                        <span className="playback-status">
-                          {t("playback.status", {
-                            current: safeFrameIndex + 1,
-                            total: history.length,
-                            step: activeFrame?.step ?? 0
-                          })}
-                        </span>
-                      </div>
-                      <div className="playback-speed">
-                        <span>{t("playback.speed")}</span>
-                        {PLAY_SPEED_OPTIONS.map((speed) => (
-                          <button
-                            key={speed}
-                            className={`btn btn-sm ${playSpeed === speed ? "active" : ""}`}
-                            onClick={() => setPlaySpeed(speed)}
-                          >
-                            {speed}x
-                          </button>
-                        ))}
-                        <button className="btn btn-sm" onClick={() => setShowVision((v) => !v)}>
-                          {showVision ? t("action.hideVision") : t("action.showVision")}
-                        </button>
-                        <button className="btn btn-sm" onClick={() => setShowTrails((v) => !v)}>
-                          {showTrails ? t("action.hideTrails") : t("action.showTrails")}
-                        </button>
-                      </div>
-                    </div>
-                    <input
-                      className="frame-slider"
-                      type="range"
-                      min={0}
-                      max={Math.max(0, history.length - 1)}
-                      step={1}
-                      value={safeFrameIndex}
-                      onChange={(e) => {
-                        setIsPlaying(false);
-                        setFrameIndex(Number(e.target.value));
-                      }}
-                    />
-                    <div className="playback-row playback-row-bottom">
-                      <div className="playback-nav">
-                        <button className="btn btn-sm" onClick={() => jumpKeyframe(-1)}>
-                          {t("action.prevKeyframe")}
-                        </button>
-                        <button className="btn btn-sm" onClick={() => jumpKeyframe(1)}>
-                          {t("action.nextKeyframe")}
-                        </button>
-                      </div>
-                      <select
-                        className="keyframe-select"
-                        value={selectedKeyframe}
-                        onChange={(e) => {
-                          if (e.target.value === "__current__") return;
-                          setIsPlaying(false);
-                          setFrameIndex(Number(e.target.value));
-                        }}
-                      >
-                        <option value="__current__">{t("playback.currentFrame")}</option>
-                        {keyframes.map((item) => (
-                          <option key={item.frameIndex} value={item.frameIndex}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-                <div className="world-layout">
-                  <div className="world-canvas">
-                    <WorldSvg
-                      world={displayWorld}
-                      visionRange={Number(simConfig.vision_range ?? config.vision_range)}
-                      showVision={showVision}
-                      showTrails={showTrails}
-                      showLabels={showLabels}
-                      trails={trails}
-                      t={t}
-                      onHoverChange={setHoverInfo}
-                    />
-                  </div>
-                  <div className="world-legend card-lite">
-                    <div className="world-legend-title">{t("world.legend")}</div>
-                    <LegendRow color="#0f172a" shape="square" label={t("world.obstacle.label")} desc={t("world.obstacle.desc")} />
-                    <LegendRow color="#f59e0b" shape="star" label={t("world.hotspot.label")} desc={t("world.hotspot.desc")} />
-                    <LegendRow color="#dc2626" shape="triangle" label={t("world.activeTarget.label")} desc={t("world.activeTarget.desc")} />
-                    <LegendRow color="#16a34a" shape="dot" label={t("world.completedTarget.label")} desc={t("world.completedTarget.desc")} />
-                    <LegendRow color="#0ea5e9" shape="dot" label={t("world.agent.label")} desc={t("world.agent.desc")} />
-                    <LegendRow color="#64748b" shape="dot" label={t("world.failedAgent.label")} desc={t("world.failedAgent.desc")} />
-                    <LegendRow color="#7c3aed" shape="line" label={t("world.trail.label")} desc={t("world.trail.desc")} />
-                    <LegendRow color="#0ea5e9" shape="ring" label={t("world.vision.label")} desc={t("world.vision.desc")} />
-                    <p className="world-note">
-                      {history.length > 0
-                        ? t("world.frameNote", {
-                            current: safeFrameIndex + 1,
-                            total: history.length,
-                            step: activeFrame?.step ?? 0
-                          })
-                        : t("world.noHistory")}
-                    </p>
-                    <p className="world-note">{hoverInfo || t("world.hoverHint")}</p>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="placeholder">{t("placeholder.runSimulationFirst")}</div>
-            )}
-          </section>
-
-          <section className="card chart-card timeline-card">
-            <div className="panel-title-row">
-              <h3>{t("panel.timeline")}</h3>
-              <div className="timeline-summary-inline">
-                <span>{t("timeline.steps", { value: Number(metrics?.steps_used ?? 0).toFixed(0) })}</span>
-                <span>
-                  {t("timeline.active", {
-                    value: Number(timeline.at(-1)?.active_targets ?? 0).toFixed(0)
-                  })}
-                </span>
-                <span>
-                  {t("timeline.failed", {
-                    value: Number(timeline.at(-1)?.failed_agents ?? 0).toFixed(0)
-                  })}
-                </span>
-              </div>
-            </div>
-            {timeline.length > 0 ? (
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart data={timeline} margin={{ top: 8, right: 8, left: 0, bottom: 2 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="step" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="active_targets"
-                    stroke="#dc2626"
-                    strokeWidth={2}
-                    dot={false}
-                    name={t("timeline.activeTargets")}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="captures_per_step"
-                    stroke="#16a34a"
-                    strokeWidth={2}
-                    dot={false}
-                    name={t("timeline.capturesPerStep")}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="failed_agents"
-                    stroke="#334155"
-                    strokeWidth={2}
-                    dot={false}
-                    name={t("timeline.failedAgents")}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="placeholder compact">{t("placeholder.runSimulationFirst")}</div>
-            )}
-          </section>
-
-          <section className="panel-grid-2">
-            <article className="card chart-card">
-              <div className="panel-title-row">
-                <h3>{t("panel.scenarioComparison")}</h3>
-                <div className="inline-actions">
-                  <button className="btn btn-sm" onClick={exportScenarioSummaryCsv} disabled={scenarioRows.length === 0}>
-                    {t("action.exportSummaryCsv")}
-                  </button>
-                  <button className="btn btn-sm" onClick={exportExperimentJson} disabled={!expResult}>
-                    {t("action.exportJson")}
-                  </button>
-                </div>
-              </div>
-              {scenarioRows.length > 0 ? (
-                <>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={scenarioRows} layout="vertical" margin={{ left: 10, right: 10 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                      <YAxis type="category" width={120} dataKey="scenario_label" />
-                      <Tooltip formatter={(v, n) => [`${Number(v).toFixed(1)}%`, n]} />
-                      <Legend />
-                      <Bar dataKey="completion_pct" name={t("chart.completion")} fill="#0ea5e9" />
-                      <Bar dataKey="coverage_pct" name={t("chart.coverage")} fill="#14b8a6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  {expResult && (
-                    <p className="robustness">
-                      {t("chart.robustness")}:{" "}
-                      <strong>{Number(expResult.robustness_index ?? 0).toFixed(4)}</strong>
-                    </p>
-                  )}
-                </>
-              ) : (
-                <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
-              )}
-            </article>
-
-            <article className="card chart-card">
-              <div className="panel-title-row">
-                <h3>{t("panel.strategyComparison")}</h3>
-                <button className="btn btn-sm" onClick={exportStrategyMatrixCsv} disabled={strategyRows.length === 0}>
-                  {t("action.exportMatrixCsv")}
-                </button>
-              </div>
-              {strategyComparisonRows.length > 0 ? (
-                <>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={strategyComparisonRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="strategy" tickFormatter={strategyLabel} />
-                      <YAxis domain={[0, 1]} tickFormatter={(v) => pct(v, 0)} />
-                      <Tooltip formatter={(v, n) => [pct(v, 2), n]} />
-                      <Legend />
-                      <Bar
-                        dataKey="with_comm_normal"
-                        name={scenarioLabel("with_comm_normal")}
-                        fill="#0ea5e9"
-                      />
-                      <Bar
-                        dataKey="without_comm_baseline"
-                        name={scenarioLabel("without_comm_baseline")}
-                        fill="#64748b"
-                      />
-                      <Bar
-                        dataKey="with_comm_fault"
-                        name={scenarioLabel("with_comm_fault")}
-                        fill="#14b8a6"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <ResponsiveContainer width="100%" height={170}>
-                    <BarChart data={robustnessRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="strategy" tickFormatter={strategyLabel} />
-                      <YAxis domain={[0, "auto"]} />
-                      <Tooltip formatter={(v) => [Number(v).toFixed(4), t("chart.robustness")]} />
-                      <Bar dataKey="robustness" name={t("chart.robustness")} fill="#f97316" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </>
-              ) : (
-                <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
-              )}
-            </article>
-          </section>
-
-          <section className="panel-grid-2">
-            <article className="card chart-card">
-              <div className="panel-title-row">
-                <h3>{t("panel.statisticalSummary")}</h3>
-                <div className="inline-actions">
-                  <select
-                    className="panel-select"
-                    value={selectedStatMetric}
-                    onChange={(e) => setSelectedStatMetric(e.target.value)}
-                  >
-                    {STAT_METRIC_OPTIONS.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {t(item.labelKey)}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="btn btn-sm"
-                    onClick={exportStrategyStatsCsv}
-                    disabled={strategyStatRows.length === 0}
-                  >
-                    {t("action.exportStatsCsv")}
-                  </button>
-                </div>
-              </div>
-              {strategyStatRows.length > 0 ? (
-                <>
-                  <p className="chart-note">{t("chart.statNote")}</p>
-                  <div className="table-wrap">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>{t("table.strategy")}</th>
-                          <th>{t("table.scenario")}</th>
-                          <th>{t("table.meanBand")}</th>
-                          <th>{t("table.min")}</th>
-                          <th>{t("table.median")}</th>
-                          <th>{t("table.max")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {strategyStatRows.map((row) => (
-                          <tr key={`${row.strategy}-${row.scenario}`}>
-                            <td>{strategyLabel(row.strategy)}</td>
-                            <td>{scenarioLabel(row.scenario)}</td>
-                            <td>{row.band}</td>
-                            <td>{row.min.toFixed(3)}</td>
-                            <td>{row.median.toFixed(3)}</td>
-                            <td>{row.max.toFixed(3)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
-                <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
-              )}
-            </article>
-
-            <article className="card chart-card">
-              <div className="panel-title-row">
-                <h3>{t("panel.benefitCost")}</h3>
-                <button className="btn btn-sm" onClick={exportExperimentJson} disabled={!expResult}>
-                  {t("action.exportJson")}
-                </button>
-              </div>
-              {derivedComparisonRows.length > 0 ? (
-                <>
-                  <div className="insight-grid">
-                    {derivedCards.map((card) => (
-                      <article className="insight-card card-lite" key={card.key}>
-                        <div className="insight-label">{t(card.key)}</div>
-                        <div className="insight-value">{card.value}</div>
-                      </article>
-                    ))}
-                  </div>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={derivedComparisonRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="strategy" tickFormatter={strategyLabel} />
-                      <YAxis tickFormatter={(v) => `${v}%`} />
-                      <Tooltip formatter={(v, n) => [`${Number(v).toFixed(1)}%`, n]} />
-                      <Legend />
-                      <Bar dataKey="fault_retention_pct" name={t("chart.faultRetention")} fill="#0ea5e9" />
-                      <Bar dataKey="comm_gain_pct" name={t("chart.commGain")} fill="#14b8a6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <div className="table-wrap compact-table">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>{t("table.strategy")}</th>
-                          <th>{t("table.msgCostNormal")}</th>
-                          <th>{t("table.msgCostFault")}</th>
-                          <th>{t("table.conflictCostFault")}</th>
-                          <th>{t("table.completionAgeNormal")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {derivedComparisonRows.map((row) => (
-                          <tr key={`derived-${row.strategy}`}>
-                            <td>{strategyLabel(row.strategy)}</td>
-                            <td>{Number(row.message_cost_per_success_normal ?? 0).toFixed(2)}</td>
-                            <td>{Number(row.message_cost_per_success_fault ?? 0).toFixed(2)}</td>
-                            <td>{Number(row.conflict_cost_per_success_fault ?? 0).toFixed(2)}</td>
-                            <td>{Number(row.completion_vs_age_ratio_normal ?? 0).toFixed(4)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
-                <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
-              )}
-            </article>
-          </section>
-
-          <section className="card chart-card">
-            <div className="panel-title-row">
-              <h3>{t("panel.runTradeoff")}</h3>
-              <div className="inline-actions">
-                <select
-                  className="panel-select"
-                  value={selectedTradeoffScenario}
-                  onChange={(e) => setSelectedTradeoffScenario(e.target.value)}
-                >
-                  {SCENARIO_KEYS.map((value) => (
-                    <option key={value} value={value}>
-                      {scenarioLabel(value)}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="btn btn-sm"
-                  onClick={exportRunRowsCsv}
-                  disabled={tradeoffRows.length === 0}
-                >
-                  {t("action.exportRunCsv")}
-                </button>
-              </div>
-            </div>
-            {filteredTradeoffRows.length > 0 ? (
-              <>
-                <p className="chart-note">{t("chart.tradeoffNote")}</p>
-                <ResponsiveContainer width="100%" height={320}>
-                  <ScatterChart margin={{ top: 8, right: 12, left: 0, bottom: 12 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      type="number"
-                      dataKey="messages_sent"
-                      name={t("axis.messagesSent")}
-                      label={{ value: t("axis.messagesSent"), position: "insideBottom", offset: -4 }}
-                    />
-                    <YAxis
-                      type="number"
-                      dataKey="completion_pct"
-                      name={t("axis.completionPct")}
-                      domain={[0, 100]}
-                      tickFormatter={(v) => `${v}%`}
-                      label={{ value: t("axis.completionPct"), angle: -90, position: "insideLeft" }}
-                    />
-                    <Tooltip
-                      cursor={{ strokeDasharray: "3 3" }}
-                      formatter={(value, name) => [
-                        name === "completion_pct" ? `${Number(value).toFixed(1)}%` : Number(value).toFixed(2),
-                        name
-                      ]}
-                      labelFormatter={() => ""}
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null;
-                        const point = payload[0].payload;
-                        return (
-                          <div className="tooltip-card">
-                            <div>
-                              {t("tooltip.runLabel", {
-                                strategy: strategyLabel(point.strategy),
-                                scenario: scenarioLabel(point.scenario),
-                                run: point.run_index
-                              })}
-                            </div>
-                            <div>{t("tooltip.messages")}: {point.messages_sent}</div>
-                            <div>{t("tooltip.completion")}: {point.completion_pct.toFixed(1)}%</div>
-                            <div>{t("tooltip.conflicts")}: {point.conflicts}</div>
-                            <div>{t("tooltip.infoAge")}: {point.info_age.toFixed(2)}</div>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Legend formatter={(value) => strategyLabel(value)} />
-                    {STRATEGY_OPTIONS.map((option) => (
-                      <Scatter
-                        key={option}
-                        name={option}
-                        data={filteredTradeoffRows.filter((row) => row.strategy === option)}
-                        fill={STRATEGY_COLORS[option]}
-                      />
-                    ))}
-                  </ScatterChart>
-                </ResponsiveContainer>
-              </>
-            ) : (
-              <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
-            )}
-          </section>
-        </section>
-      </main>
+      {currentPage === "simulation" ? (
+        <SimulationPage
+          t={t}
+          config={config}
+          runs={runs}
+          history={history}
+          safeFrameIndex={safeFrameIndex}
+          strategyOptions={STRATEGY_OPTIONS}
+          strategyLabel={strategyLabel}
+          fieldGroups={FIELD_GROUPS}
+          showVision={showVision}
+          showTrails={showTrails}
+          showLabels={showLabels}
+          trailLength={trailLength}
+          onUpdateField={updateField}
+          onUpdateSelectField={updateSelectField}
+          onRunsChange={setRuns}
+          onShowVisionChange={setShowVision}
+          onShowTrailsChange={setShowTrails}
+          onShowLabelsChange={setShowLabels}
+          onTrailLengthChange={setTrailLength}
+          onFrameIndexChange={handleFrameIndexChange}
+          displayWorld={displayWorld}
+          timeline={timeline}
+          metrics={metrics}
+          trails={trails}
+          simConfig={simConfig}
+          activeFrame={activeFrame}
+          isPlaying={isPlaying}
+          playSpeed={playSpeed}
+          selectedKeyframe={selectedKeyframe}
+          keyframes={keyframes}
+          hoverInfo={hoverInfo}
+          onHoverChange={setHoverInfo}
+          onPlayPause={handlePlayPause}
+          onStepFrame={stepFrame}
+          onJumpKeyframe={jumpKeyframe}
+          onPlaySpeedChange={setPlaySpeed}
+          onToggleVision={() => setShowVision((v) => !v)}
+          onToggleTrails={() => setShowTrails((v) => !v)}
+          onExportTimelineCsv={exportTimelineCsv}
+          metricCards={metricCards}
+          expResult={expResult}
+          derivedCards={derivedCards}
+        />
+      ) : (
+        <AnalysisPage
+          t={t}
+          scenarioRows={scenarioRows}
+          strategyRows={strategyRows}
+          strategyComparisonRows={strategyComparisonRows}
+          robustnessRows={robustnessRows}
+          strategyStatRows={strategyStatRows}
+          derivedCards={derivedCards}
+          derivedComparisonRows={derivedComparisonRows}
+          filteredTradeoffRows={filteredTradeoffRows}
+          tradeoffRows={tradeoffRows}
+          selectedStatMetric={selectedStatMetric}
+          selectedTradeoffScenario={selectedTradeoffScenario}
+          scenarioLabel={scenarioLabel}
+          strategyLabel={strategyLabel}
+          onSelectedStatMetricChange={setSelectedStatMetric}
+          onSelectedTradeoffScenarioChange={setSelectedTradeoffScenario}
+          onExportScenarioSummaryCsv={exportScenarioSummaryCsv}
+          onExportExperimentJson={exportExperimentJson}
+          onExportStrategyMatrixCsv={exportStrategyMatrixCsv}
+          onExportStrategyStatsCsv={exportStrategyStatsCsv}
+          onExportRunRowsCsv={exportRunRowsCsv}
+        />
+      )}
     </div>
-  );
-}
-
-function LegendRow({ color, shape, label, desc }) {
-  return (
-    <div className="world-legend-item">
-      <span className={`legend-chip ${shape}`} style={{ color }} />
-      <div>
-        <div className="world-legend-label">{label}</div>
-        <div className="world-legend-desc">{desc}</div>
-      </div>
-    </div>
-  );
-}
-
-function WorldSvg({
-  world,
-  visionRange,
-  showVision,
-  showTrails,
-  showLabels,
-  trails,
-  t,
-  onHoverChange
-}) {
-  const width = 780;
-  const height = 600;
-  const sx = width / Math.max(1, world.width);
-  const sy = height / Math.max(1, world.height);
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="world-svg">
-      <rect x="0" y="0" width={width} height={height} fill="#f8fafc" />
-
-      {showTrails &&
-        Array.from(trails.entries()).map(([id, points]) => {
-          if (!Array.isArray(points) || points.length < 2) return null;
-          const path = points
-            .map((p) => `${(p.x + 0.5) * sx},${height - (p.y + 0.5) * sy}`)
-            .join(" ");
-          return (
-            <polyline
-              key={`trail-${id}`}
-              points={path}
-              fill="none"
-              stroke="#7c3aed"
-              strokeWidth={Math.max(1.2, sx * 0.08)}
-              opacity="0.5"
-            />
-          );
-        })}
-
-      {world.obstacles.map((p, idx) => (
-        <rect
-          key={`o-${idx}`}
-          x={p[0] * sx}
-          y={height - (p[1] + 1) * sy}
-          width={sx}
-          height={sy}
-          fill="#0f172a"
-          opacity="0.92"
-        />
-      ))}
-
-      {world.hotspots.map((p, idx) => (
-        <circle
-          key={`h-${idx}`}
-          cx={(p[0] + 0.5) * sx}
-          cy={height - (p[1] + 0.5) * sy}
-          r={Math.max(5, sx * 0.44)}
-          fill="#f59e0b"
-          opacity="0.76"
-          onMouseEnter={() =>
-            onHoverChange?.(t("world.hover.hotspot", { x: p[0], y: p[1] }))
-          }
-        />
-      ))}
-
-      {world.completed_targets.map((p, idx) => (
-        <circle
-          key={`ct-${idx}`}
-          cx={(p.x + 0.5) * sx}
-          cy={height - (p.y + 0.5) * sy}
-          r={Math.max(3, sx * 0.24)}
-          fill="#16a34a"
-          onMouseEnter={() =>
-            onHoverChange?.(t("world.hover.completedTarget", { x: p.x, y: p.y }))
-          }
-        />
-      ))}
-
-      {world.active_targets.map((p, idx) => (
-        <polygon
-          key={`at-${idx}`}
-          points={`${(p.x + 0.5) * sx},${height - (p.y + 0.18) * sy} ${(p.x + 0.2) * sx},${height - (p.y + 0.82) * sy} ${(p.x + 0.8) * sx},${height - (p.y + 0.82) * sy}`}
-          fill="#dc2626"
-          onMouseEnter={() =>
-            onHoverChange?.(t("world.hover.activeTarget", { x: p.x, y: p.y }))
-          }
-        />
-      ))}
-
-      {world.agents.map((agent, idx) => {
-        const cx = (agent.x + 0.5) * sx;
-        const cy = height - (agent.y + 0.5) * sy;
-        return (
-          <g key={`a-${idx}`}>
-            {showVision && !agent.failed && (
-              <circle
-                cx={cx}
-                cy={cy}
-                r={Math.max(4, visionRange * ((sx + sy) / 2))}
-                fill="rgba(14,165,233,0.06)"
-                stroke="rgba(14,165,233,0.38)"
-                strokeWidth={1}
-              />
-            )}
-            <circle
-              cx={cx}
-              cy={cy}
-              r={Math.max(3, sx * 0.28)}
-              fill={agent.failed ? "#64748b" : "#0ea5e9"}
-              stroke="#ffffff"
-              strokeWidth={1.2}
-              onMouseEnter={() =>
-                onHoverChange?.(
-                  t("world.hover.agent", {
-                    id: agent.id,
-                    x: agent.x,
-                    y: agent.y,
-                    state: t(agent.failed ? "status.failed" : "status.active")
-                  })
-                )
-              }
-            />
-            {showLabels && (
-              <text x={cx + 4} y={cy - 4} className="agent-label">
-                A{agent.id}
-              </text>
-            )}
-          </g>
-        );
-      })}
-    </svg>
   );
 }
 
