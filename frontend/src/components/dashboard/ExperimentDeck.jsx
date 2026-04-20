@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   ResponsiveContainer,
   Scatter,
@@ -12,24 +13,42 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { pct, SCENARIO_KEYS, STAT_METRIC_OPTIONS, STRATEGY_COLORS, STRATEGY_OPTIONS } from "../../dashboardModel.js";
+import { SCENARIO_KEYS, STAT_METRIC_OPTIONS, STRATEGY_COLORS, STRATEGY_OPTIONS } from "../../dashboardModel.js";
 import SectionShell from "./SectionShell.jsx";
+
+const SCENARIO_COLORS = {
+  with_comm_normal: "#0ea5e9",
+  without_comm_baseline: "#64748b",
+  with_comm_fault: "#14b8a6"
+};
+
+const STRATEGY_COMPARISON_METRICS = new Set([
+  "task_completion_rate",
+  "coverage_rate",
+  "average_information_age",
+  "assignment_conflicts"
+]);
 
 export default function ExperimentDeck({
   t,
   scenarioRows,
   strategyRows,
-  strategyComparisonRows,
   robustnessRows,
   strategyStatRows,
   derivedCards,
   derivedComparisonRows,
   filteredTradeoffRows,
   tradeoffRows,
+  currentStrategyContext,
+  selectedStrategyScenario,
+  selectedStrategyMetric,
+  strategyMetricRows,
   selectedStatMetric,
   selectedTradeoffScenario,
   scenarioLabel,
   strategyLabel,
+  onSelectedStrategyScenarioChange,
+  onSelectedStrategyMetricChange,
   onSelectedStatMetricChange,
   onSelectedTradeoffScenarioChange,
   onExportScenarioSummaryCsv,
@@ -39,6 +58,13 @@ export default function ExperimentDeck({
   onExportRunRowsCsv,
   showHeader = true
 }) {
+  const strategyMetricLabelKey =
+    strategyMetricRows[0]?.metric_label_key ??
+    STAT_METRIC_OPTIONS.find((item) => item.value === selectedStrategyMetric)?.labelKey ??
+    "statMetric.task_completion_rate";
+  const strategyMetricSuffix = strategyMetricRows[0]?.value_suffix ?? "";
+  const isStrategyMetricPercent = strategyMetricSuffix === "%";
+
   return (
     <section className="experiment-deck">
       {showHeader ? (
@@ -48,36 +74,52 @@ export default function ExperimentDeck({
         </div>
       ) : null}
 
-      <div className="panel-grid-2">
+      <div className="panel-grid-2 analysis-focus-grid">
         <SectionShell
           className="card"
-          label={t("panel.scenarioComparison")}
-          title={t("panel.scenarioComparison")}
+          label={t("panel.currentStrategyScenarios")}
+          title={t("panel.currentStrategyScenarios")}
           actions={
             <div className="inline-actions">
+              <span className="context-pill">
+                {t("analysis.currentStrategyLabel")}: {currentStrategyContext?.label}
+              </span>
               <button className="btn btn-sm" onClick={onExportScenarioSummaryCsv} disabled={scenarioRows.length === 0}>
                 {t("action.exportSummaryCsv")}
-              </button>
-              <button className="btn btn-sm" onClick={onExportExperimentJson} disabled={!strategyRows.length}>
-                {t("action.exportJson")}
               </button>
             </div>
           }
         >
+          <p className="chart-note">{t("analysis.fixedStrategyNote")}</p>
           {scenarioRows.length > 0 ? (
-            <>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={scenarioRows} layout="vertical" margin={{ left: 10, right: 10 }}>
+            <div className="analysis-dual-metric-grid">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={scenarioRows} margin={{ left: 8, right: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                  <YAxis type="category" width={120} dataKey="scenario_label" />
-                  <Tooltip formatter={(v, n) => [`${Number(v).toFixed(1)}%`, n]} />
-                  <Legend />
-                  <Bar dataKey="completion_pct" name={t("chart.completion")} fill="#0ea5e9" />
-                  <Bar dataKey="coverage_pct" name={t("chart.coverage")} fill="#14b8a6" />
+                  <XAxis dataKey="scenario_label" />
+                  <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip formatter={(v) => [`${Number(v).toFixed(1)}%`, t("chart.completion")]} />
+                  <Bar dataKey="completion_pct" name={t("chart.completion")}>
+                    {scenarioRows.map((row) => (
+                      <Cell key={`completion-${row.scenario}`} fill={SCENARIO_COLORS[row.scenario]} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={scenarioRows} margin={{ left: 8, right: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="scenario_label" />
+                  <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip formatter={(v) => [`${Number(v).toFixed(1)}%`, t("chart.coverage")]} />
+                  <Bar dataKey="coverage_pct" name={t("chart.coverage")}>
+                    {scenarioRows.map((row) => (
+                      <Cell key={`coverage-${row.scenario}`} fill={SCENARIO_COLORS[row.scenario]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           ) : (
             <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
           )}
@@ -85,35 +127,69 @@ export default function ExperimentDeck({
 
         <SectionShell
           className="card"
-          label={t("panel.strategyComparison")}
-          title={t("panel.strategyComparison")}
+          label={t("panel.scenarioStrategyMetric")}
+          title={t("panel.scenarioStrategyMetric")}
           actions={
-            <button className="btn btn-sm" onClick={onExportStrategyMatrixCsv} disabled={strategyRows.length === 0}>
-              {t("action.exportMatrixCsv")}
-            </button>
+            <div className="inline-actions analysis-filter-row">
+              <label className="analysis-inline-field">
+                <span>{t("analysis.scenarioSelector")}</span>
+                <select
+                  className="panel-select"
+                  value={selectedStrategyScenario}
+                  onChange={(e) => onSelectedStrategyScenarioChange(e.target.value)}
+                >
+                  {SCENARIO_KEYS.map((value) => (
+                    <option key={value} value={value}>
+                      {scenarioLabel(value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="analysis-inline-field">
+                <span>{t("analysis.metricSelector")}</span>
+                <select
+                  className="panel-select"
+                  value={selectedStrategyMetric}
+                  onChange={(e) => onSelectedStrategyMetricChange(e.target.value)}
+                >
+                  {STAT_METRIC_OPTIONS.filter((item) =>
+                    STRATEGY_COMPARISON_METRICS.has(item.value)
+                  ).map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {t(item.labelKey)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="btn btn-sm" onClick={onExportStrategyMatrixCsv} disabled={strategyRows.length === 0}>
+                {t("action.exportMatrixCsv")}
+              </button>
+            </div>
           }
         >
-          {strategyComparisonRows.length > 0 ? (
+          <p className="chart-note">{t("analysis.fixedScenarioNote")}</p>
+          {strategyMetricRows.length > 0 ? (
             <>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={strategyComparisonRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+              <ResponsiveContainer width="100%" height={270}>
+                <BarChart data={strategyMetricRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="strategy" tickFormatter={strategyLabel} />
-                  <YAxis domain={[0, 1]} tickFormatter={(v) => pct(v, 0)} />
-                  <Tooltip formatter={(v, n) => [pct(v, 2), n]} />
-                  <Legend />
-                  <Bar dataKey="with_comm_normal" name={scenarioLabel("with_comm_normal")} fill="#0ea5e9" />
-                  <Bar dataKey="without_comm_baseline" name={scenarioLabel("without_comm_baseline")} fill="#64748b" />
-                  <Bar dataKey="with_comm_fault" name={scenarioLabel("with_comm_fault")} fill="#14b8a6" />
-                </BarChart>
-              </ResponsiveContainer>
-              <ResponsiveContainer width="100%" height={170}>
-                <BarChart data={robustnessRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="strategy" tickFormatter={strategyLabel} />
-                  <YAxis domain={[0, "auto"]} />
-                  <Tooltip formatter={(v) => [Number(v).toFixed(4), t("chart.robustness")]} />
-                  <Bar dataKey="robustness" name={t("chart.robustness")} fill="#f97316" />
+                  <YAxis tickFormatter={(v) => (isStrategyMetricPercent ? `${v}%` : Number(v).toFixed(0))} />
+                  <Tooltip
+                    formatter={(v, _name, item) => {
+                      const suffix = item?.payload?.value_suffix ?? "";
+                      const digits = suffix ? 0 : 2;
+                      return [
+                        `${Number(v).toFixed(digits)}${suffix}`,
+                        t(item?.payload?.metric_label_key ?? strategyMetricLabelKey)
+                      ];
+                    }}
+                  />
+                  <Bar dataKey="value" name={t(strategyMetricLabelKey)}>
+                    {strategyMetricRows.map((row) => (
+                      <Cell key={`strategy-metric-${row.strategy}`} fill={STRATEGY_COLORS[row.strategy]} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </>
@@ -122,6 +198,27 @@ export default function ExperimentDeck({
           )}
         </SectionShell>
       </div>
+
+      <SectionShell
+        className="card"
+        label={t("chart.robustness")}
+        title={t("chart.robustness")}
+      >
+        <p className="chart-note">{t("analysis.robustnessNote")}</p>
+        {robustnessRows.length > 0 ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={robustnessRows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="strategy" tickFormatter={strategyLabel} />
+              <YAxis domain={[0, "auto"]} />
+              <Tooltip formatter={(v) => [Number(v).toFixed(4), t("chart.robustness")]} />
+              <Bar dataKey="robustness" name={t("chart.robustness")} fill="#f97316" />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="placeholder compact">{t("placeholder.runExperimentsFirst")}</div>
+        )}
+      </SectionShell>
 
       <div className="panel-grid-2">
         <SectionShell

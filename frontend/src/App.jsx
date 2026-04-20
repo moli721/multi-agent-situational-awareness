@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   buildDerivedCards,
   buildDerivedComparisonRows,
+  buildStrategyMetricComparisonRows,
   buildStrategyStatRows,
   buildTradeoffScatterRows
 } from "./experimentInsights";
@@ -45,6 +46,8 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(1);
   const [selectedStatMetric, setSelectedStatMetric] = useState("task_completion_rate");
+  const [selectedStrategyScenario, setSelectedStrategyScenario] = useState("with_comm_normal");
+  const [selectedStrategyMetric, setSelectedStrategyMetric] = useState("task_completion_rate");
   const [selectedTradeoffScenario, setSelectedTradeoffScenario] =
     useState("with_comm_normal");
   const [currentPage, setCurrentPage] = useState("simulation");
@@ -127,23 +130,17 @@ function App() {
     [expResult]
   );
 
-  const strategyComparisonRows = useMemo(() => {
-    const grouped = new Map();
-    for (const row of strategyRows) {
-      const strategy = String(row.strategy ?? "");
-      const scenario = String(row.scenario ?? "");
-      if (!grouped.has(strategy)) {
-        grouped.set(strategy, {
-          strategy,
-          with_comm_normal: 0,
-          with_comm_fault: 0,
-          without_comm_baseline: 0
-        });
-      }
-      grouped.get(strategy)[scenario] = Number(row.task_completion_rate ?? 0);
-    }
-    return Array.from(grouped.values());
-  }, [strategyRows]);
+  const currentStrategyKey = String(
+    expResult?.default_strategy ?? config.decision_strategy ?? "current"
+  );
+
+  const currentStrategyContext = useMemo(
+    () => ({
+      strategy: currentStrategyKey,
+      label: strategyLabel(currentStrategyKey)
+    }),
+    [currentStrategyKey, strategyLabel]
+  );
 
   const robustnessRows = useMemo(() => {
     const obj = expResult?.robustness_by_strategy ?? {};
@@ -156,6 +153,16 @@ function App() {
   const strategyStatRows = useMemo(
     () => buildStrategyStatRows(expResult?.strategy_stats ?? [], selectedStatMetric),
     [expResult, selectedStatMetric]
+  );
+
+  const strategyMetricRows = useMemo(
+    () =>
+      buildStrategyMetricComparisonRows(
+        strategyRows,
+        selectedStrategyScenario,
+        selectedStrategyMetric
+      ),
+    [strategyRows, selectedStrategyScenario, selectedStrategyMetric]
   );
 
   const derivedComparisonRows = useMemo(
@@ -435,17 +442,22 @@ function App() {
           t={t}
           scenarioRows={scenarioRows}
           strategyRows={strategyRows}
-          strategyComparisonRows={strategyComparisonRows}
           robustnessRows={robustnessRows}
           strategyStatRows={strategyStatRows}
           derivedCards={derivedCards}
           derivedComparisonRows={derivedComparisonRows}
           filteredTradeoffRows={filteredTradeoffRows}
           tradeoffRows={tradeoffRows}
+          currentStrategyContext={currentStrategyContext}
+          selectedStrategyScenario={selectedStrategyScenario}
+          selectedStrategyMetric={selectedStrategyMetric}
+          strategyMetricRows={strategyMetricRows}
           selectedStatMetric={selectedStatMetric}
           selectedTradeoffScenario={selectedTradeoffScenario}
           scenarioLabel={scenarioLabel}
           strategyLabel={strategyLabel}
+          onSelectedStrategyScenarioChange={setSelectedStrategyScenario}
+          onSelectedStrategyMetricChange={setSelectedStrategyMetric}
           onSelectedStatMetricChange={setSelectedStatMetric}
           onSelectedTradeoffScenarioChange={setSelectedTradeoffScenario}
           onExportScenarioSummaryCsv={exportScenarioSummaryCsv}

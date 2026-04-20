@@ -280,10 +280,16 @@ test("ExperimentDeck renders analytics sections even before experiment data exis
       derivedComparisonRows={[]}
       filteredTradeoffRows={[]}
       tradeoffRows={[]}
+      currentStrategyContext={{ strategy: "current", label: "strategy.current" }}
+      selectedStrategyScenario="with_comm_normal"
+      selectedStrategyMetric="task_completion_rate"
+      strategyMetricRows={[]}
       selectedStatMetric="task_completion_rate"
       selectedTradeoffScenario="with_comm_normal"
       scenarioLabel={(value) => value}
       strategyLabel={(value) => value}
+      onSelectedStrategyScenarioChange={() => {}}
+      onSelectedStrategyMetricChange={() => {}}
       onSelectedStatMetricChange={() => {}}
       onSelectedTradeoffScenarioChange={() => {}}
       onExportScenarioSummaryCsv={() => {}}
@@ -294,7 +300,10 @@ test("ExperimentDeck renders analytics sections even before experiment data exis
     />
   );
 
-  assert.match(html, /panel\.scenarioComparison/);
+  assert.match(html, /panel\.currentStrategyScenarios/);
+  assert.match(html, /panel\.scenarioStrategyMetric/);
+  assert.match(html, /analysis\.fixedStrategyNote/);
+  assert.match(html, /analysis\.fixedScenarioNote/);
   assert.match(html, /panel\.runTradeoff/);
   assert.match(html, /placeholder\.runExperimentsFirst/);
 });
@@ -312,10 +321,16 @@ test("AnalysisPage renders a summary band ahead of experiment charts", () => {
       derivedComparisonRows={[]}
       filteredTradeoffRows={[]}
       tradeoffRows={[]}
+      currentStrategyContext={{ strategy: "current", label: "strategy.current" }}
+      selectedStrategyScenario="with_comm_normal"
+      selectedStrategyMetric="task_completion_rate"
+      strategyMetricRows={[]}
       selectedStatMetric="task_completion_rate"
       selectedTradeoffScenario="with_comm_normal"
       scenarioLabel={(value) => value}
       strategyLabel={(value) => value}
+      onSelectedStrategyScenarioChange={() => {}}
+      onSelectedStrategyMetricChange={() => {}}
       onSelectedStatMetricChange={() => {}}
       onSelectedTradeoffScenarioChange={() => {}}
       onExportScenarioSummaryCsv={() => {}}
@@ -327,6 +342,8 @@ test("AnalysisPage renders a summary band ahead of experiment charts", () => {
   );
 
   assert.match(html, /analysis-summary-band/);
-  assert.match(html, /panel\.scenarioComparison/);
+  assert.match(html, /panel\.currentStrategyScenarios/);
+  assert.match(html, /panel\.scenarioStrategyMetric/);
+  assert.doesNotMatch(html, /panel\.scenarioComparison/);
   assert.doesNotMatch(html, /panel\.finalWorld/);
 });

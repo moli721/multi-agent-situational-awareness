@@ -1146,6 +1146,39 @@ select {
   min-height: 140px;
 }
 
+.analysis-focus-grid {
+  align-items: start;
+}
+
+.analysis-dual-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.analysis-filter-row {
+  align-items: end;
+}
+
+.analysis-inline-field {
+  min-width: 160px;
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.context-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @media (max-width: 1320px) {
   .simulation-stage-row {
     grid-template-columns: 1fr;
@@ -1167,7 +1200,8 @@ select {
 
   .stage-status-strip,
   .stage-legend-inline-grid,
-  .analysis-summary-metrics {
+  .analysis-summary-metrics,
+  .analysis-dual-metric-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1201,5 +1235,15 @@ select {
 
   .stage-status-grid {
     grid-template-columns: 1fr;
+  }
+
+  .analysis-filter-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .analysis-inline-field {
+    min-width: 0;
   }
 }

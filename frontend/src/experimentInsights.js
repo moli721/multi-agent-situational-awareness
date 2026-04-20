@@ -87,6 +87,52 @@ export function buildDerivedCards(defaultDerived) {
   ];
 }
 
+const STRATEGY_METRIC_META = {
+  task_completion_rate: {
+    metric_label_key: "statMetric.task_completion_rate",
+    transform: (value) => round((value ?? 0) * 100, 0),
+    suffix: "%"
+  },
+  coverage_rate: {
+    metric_label_key: "statMetric.coverage_rate",
+    transform: (value) => round((value ?? 0) * 100, 0),
+    suffix: "%"
+  },
+  average_information_age: {
+    metric_label_key: "statMetric.average_information_age",
+    transform: (value) => round(value ?? 0, 2),
+    suffix: ""
+  },
+  assignment_conflicts: {
+    metric_label_key: "statMetric.assignment_conflicts",
+    transform: (value) => round(value ?? 0, 2),
+    suffix: ""
+  }
+};
+
+export function buildStrategyMetricComparisonRows(strategyRows, selectedScenario, metricKey) {
+  const resolvedMetricKey = STRATEGY_METRIC_META[metricKey]
+    ? metricKey
+    : "task_completion_rate";
+  const metricMeta = STRATEGY_METRIC_META[resolvedMetricKey];
+  const rows = (Array.isArray(strategyRows) ? strategyRows : [])
+    .filter((row) => String(row?.scenario ?? "") === String(selectedScenario ?? ""))
+    .map((row) => {
+      const rawValue = Number(row?.[resolvedMetricKey] ?? 0);
+      return {
+        strategy: String(row?.strategy ?? ""),
+        scenario: String(row?.scenario ?? ""),
+        metric_key: resolvedMetricKey,
+        metric_label_key: metricMeta.metric_label_key,
+        value: metricMeta.transform(rawValue),
+        raw_value: rawValue,
+        value_suffix: metricMeta.suffix
+      };
+    });
+
+  return sortByKnownOrder(rows, STRATEGY_ORDER, "strategy");
+}
+
 export function buildTradeoffScatterRows(runRows) {
   return (Array.isArray(runRows) ? runRows : []).map((row) => ({
     strategy: String(row.strategy ?? ""),
