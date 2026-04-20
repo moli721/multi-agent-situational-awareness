@@ -14,6 +14,9 @@ const t = (key, vars = {}) => {
   if (key === "header.endpoints") {
     return `Frontend: ${vars.frontend}; Backend API: ${vars.backend}.`;
   }
+  if (key === "playback.status") {
+    return `frame ${vars.current}/${vars.total} step ${vars.step}`;
+  }
   return key;
 };
 
@@ -112,6 +115,53 @@ test("SimulationStage renders the main stage title and placeholder shell", () =>
   assert.match(html, /placeholder\.simulationGuide/);
 });
 
+test("SimulationStage renders an integrated stage viewport and compact status strip", () => {
+  const html = renderToStaticMarkup(
+    <SimulationStage
+      t={t}
+      displayWorld={{
+        width: 10,
+        height: 8,
+        obstacles: [[1, 1]],
+        hotspots: [[2, 2]],
+        active_targets: [{ x: 6, y: 3 }],
+        completed_targets: [{ x: 4, y: 5 }],
+        agents: [{ id: 1, x: 3, y: 4, failed: false }]
+      }}
+      timeline={[{ step: 1 }]}
+      history={[{ step: 1 }, { step: 2 }]}
+      metrics={null}
+      trails={new Map([[1, [{ x: 2, y: 3 }, { x: 3, y: 4 }]]])}
+      simConfig={{ vision_range: 3 }}
+      config={{ vision_range: 3 }}
+      safeFrameIndex={1}
+      activeFrame={{ step: 2 }}
+      isPlaying={false}
+      playSpeed={2}
+      selectedKeyframe="__current__"
+      keyframes={[]}
+      showVision={true}
+      showTrails={true}
+      showLabels={false}
+      hoverInfo=""
+      onHoverChange={() => {}}
+      onPlayPause={() => {}}
+      onStepFrame={() => {}}
+      onJumpKeyframe={() => {}}
+      onFrameIndexChange={() => {}}
+      onPlaySpeedChange={() => {}}
+      onToggleVision={() => {}}
+      onToggleTrails={() => {}}
+      onExportTimelineCsv={() => {}}
+    />
+  );
+
+  assert.match(html, /stage-viewport/);
+  assert.match(html, /stage-toolbar/);
+  assert.match(html, /stage-status-strip/);
+  assert.match(html, /stage-legend-inline/);
+});
+
 test("SimulationPage uses thesis-style supporting labels instead of stage summary", () => {
   const html = renderToStaticMarkup(
     <SimulationPage
@@ -164,6 +214,59 @@ test("SimulationPage uses thesis-style supporting labels instead of stage summar
   assert.doesNotMatch(html, /insight\.stageSummary/);
 });
 
+test("SimulationPage renders a narrow simulation summary rail with entity focus", () => {
+  const html = renderToStaticMarkup(
+    <SimulationPage
+      t={(key) => key}
+      config={{ decision_strategy: "strategy.current", vision_range: 3 }}
+      runs={20}
+      history={[{ step: 1 }]}
+      safeFrameIndex={0}
+      strategyOptions={[]}
+      strategyLabel={(value) => value}
+      fieldGroups={[]}
+      showVision={true}
+      showTrails={true}
+      showLabels={false}
+      trailLength={120}
+      onUpdateField={() => {}}
+      onUpdateSelectField={() => {}}
+      onRunsChange={() => {}}
+      onShowVisionChange={() => {}}
+      onShowTrailsChange={() => {}}
+      onShowLabelsChange={() => {}}
+      onTrailLengthChange={() => {}}
+      onFrameIndexChange={() => {}}
+      displayWorld={null}
+      timeline={[]}
+      metrics={null}
+      trails={new Map()}
+      simConfig={{ vision_range: 3 }}
+      activeFrame={{ step: 1 }}
+      isPlaying={false}
+      playSpeed={1}
+      selectedKeyframe="__current__"
+      keyframes={[]}
+      hoverInfo="agent hover"
+      onHoverChange={() => {}}
+      onPlayPause={() => {}}
+      onStepFrame={() => {}}
+      onJumpKeyframe={() => {}}
+      onPlaySpeedChange={() => {}}
+      onToggleVision={() => {}}
+      onToggleTrails={() => {}}
+      onExportTimelineCsv={() => {}}
+      metricCards={[["metric.coverage", 0.92]]}
+      expResult={null}
+      derivedCards={[]}
+    />
+  );
+
+  assert.match(html, /live-insight-rail compact-summary-rail/);
+  assert.match(html, /summary-rail-block/);
+  assert.match(html, /entity-focus-copy/);
+});
+
 test("ExperimentDeck renders analytics sections even before experiment data exists", () => {
   const html = renderToStaticMarkup(
     <ExperimentDeck
@@ -177,10 +280,16 @@ test("ExperimentDeck renders analytics sections even before experiment data exis
       derivedComparisonRows={[]}
       filteredTradeoffRows={[]}
       tradeoffRows={[]}
+      currentStrategyContext={{ strategy: "current", label: "strategy.current" }}
+      selectedStrategyScenario="with_comm_normal"
+      selectedStrategyMetric="task_completion_rate"
+      strategyMetricRows={[]}
       selectedStatMetric="task_completion_rate"
       selectedTradeoffScenario="with_comm_normal"
       scenarioLabel={(value) => value}
       strategyLabel={(value) => value}
+      onSelectedStrategyScenarioChange={() => {}}
+      onSelectedStrategyMetricChange={() => {}}
       onSelectedStatMetricChange={() => {}}
       onSelectedTradeoffScenarioChange={() => {}}
       onExportScenarioSummaryCsv={() => {}}
@@ -191,7 +300,10 @@ test("ExperimentDeck renders analytics sections even before experiment data exis
     />
   );
 
-  assert.match(html, /panel\.scenarioComparison/);
+  assert.match(html, /panel\.currentStrategyScenarios/);
+  assert.match(html, /panel\.scenarioStrategyMetric/);
+  assert.match(html, /analysis\.fixedStrategyNote/);
+  assert.match(html, /analysis\.fixedScenarioNote/);
   assert.match(html, /panel\.runTradeoff/);
   assert.match(html, /placeholder\.runExperimentsFirst/);
 });
@@ -209,10 +321,16 @@ test("AnalysisPage renders a summary band ahead of experiment charts", () => {
       derivedComparisonRows={[]}
       filteredTradeoffRows={[]}
       tradeoffRows={[]}
+      currentStrategyContext={{ strategy: "current", label: "strategy.current" }}
+      selectedStrategyScenario="with_comm_normal"
+      selectedStrategyMetric="task_completion_rate"
+      strategyMetricRows={[]}
       selectedStatMetric="task_completion_rate"
       selectedTradeoffScenario="with_comm_normal"
       scenarioLabel={(value) => value}
       strategyLabel={(value) => value}
+      onSelectedStrategyScenarioChange={() => {}}
+      onSelectedStrategyMetricChange={() => {}}
       onSelectedStatMetricChange={() => {}}
       onSelectedTradeoffScenarioChange={() => {}}
       onExportScenarioSummaryCsv={() => {}}
@@ -224,6 +342,8 @@ test("AnalysisPage renders a summary band ahead of experiment charts", () => {
   );
 
   assert.match(html, /analysis-summary-band/);
-  assert.match(html, /panel\.scenarioComparison/);
+  assert.match(html, /panel\.currentStrategyScenarios/);
+  assert.match(html, /panel\.scenarioStrategyMetric/);
+  assert.doesNotMatch(html, /panel\.scenarioComparison/);
   assert.doesNotMatch(html, /panel\.finalWorld/);
 });
