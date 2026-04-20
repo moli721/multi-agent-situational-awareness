@@ -119,6 +119,40 @@ class ApiExperimentMetricTests(unittest.TestCase):
         self.assertIn("task_completion_rate", result["strategy_stats"][0]["metrics"])
         self.assertEqual(result["derived_metrics"]["by_strategy"][0]["strategy"], "current")
 
+    def test_experiments_uses_request_seed_for_all_scenarios(self) -> None:
+        captured_seed_starts = []
+
+        def fake_run_monte_carlo(config, runs, seed_start=None):
+            captured_seed_starts.append(seed_start)
+            return [
+                {
+                    "seed": float((seed_start or 0) + idx),
+                    "steps_used": 40.0,
+                    "task_completion_rate": 0.5,
+                    "collaboration_efficiency": 0.1,
+                    "task_completion_latency": 5.0,
+                    "decision_response_time_steps": 5.0,
+                    "messages_sent": 10.0,
+                    "messages_received": 10.0,
+                    "failed_agents": 0.0,
+                    "coverage_rate": 0.3,
+                    "average_information_age": 4.0,
+                    "assignment_conflicts": 2.0,
+                }
+                for idx in range(runs)
+            ]
+
+        with patch.object(api, "run_monte_carlo", side_effect=fake_run_monte_carlo):
+            api.experiments(
+                ExperimentRequest(
+                    config={"random_seed": 4321, "num_targets": 10},
+                    runs=3,
+                    strategies=["current"],
+                )
+            )
+
+        self.assertEqual(captured_seed_starts, [4321, 4321, 4321])
+
 
 if __name__ == "__main__":
     unittest.main()

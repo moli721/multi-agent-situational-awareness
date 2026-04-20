@@ -194,12 +194,12 @@ def experiments_main(
             strategy_mode = "config_field"
 
         scenarios = _build_scenarios(strategy_base)
-        for scenario_idx, (scenario_name, scenario_cfg) in enumerate(scenarios.items()):
+        for scenario_name, scenario_cfg in scenarios.items():
             records = run_monte_carlo(
                 config=scenario_cfg,
                 runs=runs,
-                # Same seeds for every strategy in the same scenario for fair comparison.
-                seed_start=base.random_seed + scenario_idx * 1000,
+                # Reuse the user-selected base seed across scenarios so comparisons stay aligned.
+                seed_start=base.random_seed,
             )
             summary = _aggregate(records)
             strategy_matrix_rows.append(

@@ -338,8 +338,8 @@ def experiments(req: ExperimentRequest) -> Dict[str, Any]:
     for strategy in strategies:
         by_strategy[strategy] = {}
 
-    for idx, (scenario_name, scenario_cfg) in enumerate(scenarios):
-        scenario_seed_start = 1000 + idx * 1000
+    for scenario_name, scenario_cfg in scenarios:
+        scenario_seed_start = base.random_seed
         for strategy in strategies:
             eval_cfg = replace(scenario_cfg, decision_strategy=strategy)
             records = run_monte_carlo(eval_cfg, runs=runs, seed_start=scenario_seed_start)
