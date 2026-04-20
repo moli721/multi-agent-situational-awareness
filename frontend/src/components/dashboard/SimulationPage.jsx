@@ -114,8 +114,12 @@ export default function SimulationPage(props) {
             t={t}
             metricCards={metricCards}
             hoverInfo={hoverInfo}
-            expResult={expResult}
-            derivedCards={derivedCards}
+            activeFrame={activeFrame}
+            history={history}
+            safeFrameIndex={safeFrameIndex}
+            playSpeed={playSpeed}
+            strategyLabel={strategyLabel(config?.decision_strategy)}
+            displayWorld={displayWorld}
             summaryTitleKey="panel.simulationInfo"
           />
         </div>
