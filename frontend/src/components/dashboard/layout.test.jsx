@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import App from "../../App.jsx";
 import AnalysisPage from "./AnalysisPage.jsx";
-import ExperimentDeck from "./ExperimentDeck.jsx";
+import ExperimentDeck, { TradeoffTooltipCard } from "./ExperimentDeck.jsx";
 import HeroHeader from "./HeroHeader.jsx";
 import SimulationPage from "./SimulationPage.jsx";
 import SimulationStage from "./SimulationStage.jsx";
@@ -306,6 +306,37 @@ test("ExperimentDeck renders analytics sections even before experiment data exis
   assert.match(html, /analysis\.fixedScenarioNote/);
   assert.match(html, /panel\.runTradeoff/);
   assert.match(html, /placeholder\.runExperimentsFirst/);
+});
+
+test("TradeoffTooltipCard renders judgment-first diagnostic copy", () => {
+  const html = renderToStaticMarkup(
+    <TradeoffTooltipCard
+      t={t}
+      point={{
+        strategy: "current",
+        scenario: "with_comm_normal",
+        run_index: 7,
+        messages_sent: 82,
+        completion_pct: 100,
+        conflicts: 0,
+        info_age: 8.99,
+        judgment_key: "tooltip.judgment.highReturnLowCost",
+        standing_key: "tooltip.standing.strong",
+        explanation_key: "tooltip.explanation.highReturnLowCost",
+        explanation_detail_key: "tooltip.detail.lowConflicts"
+      }}
+      scenarioLabel={(value) => value}
+      strategyLabel={(value) => value}
+    />
+  );
+
+  assert.match(html, /tooltip\.runLabel/);
+  assert.match(html, /tooltip\.judgment\.highReturnLowCost/);
+  assert.match(html, /tooltip\.standing\.strong/);
+  assert.match(html, /Messages|tooltip\.messages/);
+  assert.match(html, /100\.0%/);
+  assert.match(html, /tooltip\.explanation\.highReturnLowCost/);
+  assert.match(html, /tooltip\.detail\.lowConflicts/);
 });
 
 test("AnalysisPage renders a summary band ahead of experiment charts", () => {

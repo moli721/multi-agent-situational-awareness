@@ -22,6 +22,133 @@ function sortByKnownOrder(values, order, key) {
   });
 }
 
+function normalizeRange(value, min, max) {
+  if (max <= min) return 0.5;
+  return (Number(value ?? 0) - min) / (max - min);
+}
+
+function inverseNormalized(value, min, max) {
+  return 1 - normalizeRange(value, min, max);
+}
+
+function buildRange(values) {
+  const numbers = values.map((value) => Number(value ?? 0));
+  return {
+    min: Math.min(...numbers),
+    max: Math.max(...numbers)
+  };
+}
+
+function resolveReturnBand(completionPct) {
+  if (completionPct >= 85) return "high";
+  if (completionPct >= 70) return "medium";
+  return "low";
+}
+
+function resolveCostBand(messagesSent, range) {
+  if (range.max <= range.min) return "medium";
+  const normalized = normalizeRange(messagesSent, range.min, range.max);
+  if (normalized <= 0.35) return "low";
+  if (normalized >= 0.65) return "high";
+  return "medium";
+}
+
+function resolveJudgmentKey(returnBand, costBand) {
+  if (returnBand === "high" && costBand === "low") return "tooltip.judgment.highReturnLowCost";
+  if (returnBand === "high" && costBand === "high") return "tooltip.judgment.highReturnHighCost";
+  if (returnBand === "low" && costBand === "low") return "tooltip.judgment.lowReturnLowCost";
+  if (returnBand === "low" && costBand === "high") return "tooltip.judgment.lowReturnHighCost";
+  return "tooltip.judgment.balanced";
+}
+
+function resolveExplanationKey(judgmentKey) {
+  switch (judgmentKey) {
+    case "tooltip.judgment.highReturnLowCost":
+      return "tooltip.explanation.highReturnLowCost";
+    case "tooltip.judgment.highReturnHighCost":
+      return "tooltip.explanation.highReturnHighCost";
+    case "tooltip.judgment.lowReturnLowCost":
+      return "tooltip.explanation.lowReturnLowCost";
+    case "tooltip.judgment.lowReturnHighCost":
+      return "tooltip.explanation.lowReturnHighCost";
+    default:
+      return "tooltip.explanation.balanced";
+  }
+}
+
+function resolveExtremeDetailKey(row, stats) {
+  const conflictNorm = normalizeRange(row.conflicts, stats.conflicts.min, stats.conflicts.max);
+  if (conflictNorm <= 0.25) return "tooltip.detail.lowConflicts";
+  if (conflictNorm >= 0.75) return "tooltip.detail.highConflicts";
+
+  const infoAgeNorm = normalizeRange(row.info_age, stats.infoAge.min, stats.infoAge.max);
+  if (infoAgeNorm <= 0.25) return "tooltip.detail.lowInfoAge";
+  if (infoAgeNorm >= 0.75) return "tooltip.detail.highInfoAge";
+
+  return null;
+}
+
+function applyRelativeStandings(rows, scoreByLabel) {
+  if (rows.length <= 1) {
+    rows.forEach((row) => {
+      row.standing_key = "tooltip.standing.middle";
+    });
+    return;
+  }
+
+  const ranked = [...rows].sort((left, right) => {
+    const scoreDiff = (scoreByLabel.get(right.label) ?? 0) - (scoreByLabel.get(left.label) ?? 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    return left.label.localeCompare(right.label);
+  });
+
+  const topCount = Math.max(1, Math.ceil(ranked.length * 0.25));
+  const bottomCount = Math.max(1, Math.ceil(ranked.length * 0.25));
+
+  ranked.forEach((row, index) => {
+    if (index < topCount) {
+      row.standing_key = "tooltip.standing.strong";
+      return;
+    }
+    if (index >= ranked.length - bottomCount) {
+      row.standing_key = "tooltip.standing.weak";
+      return;
+    }
+    row.standing_key = "tooltip.standing.middle";
+  });
+}
+
+function addTradeoffDiagnostics(rows) {
+  if (rows.length === 0) return rows;
+
+  const stats = {
+    completion: buildRange(rows.map((row) => row.completion_pct)),
+    messages: buildRange(rows.map((row) => row.messages_sent)),
+    conflicts: buildRange(rows.map((row) => row.conflicts)),
+    infoAge: buildRange(rows.map((row) => row.info_age))
+  };
+
+  const scoreByLabel = new Map();
+  rows.forEach((row) => {
+    row.return_band = resolveReturnBand(row.completion_pct);
+    row.cost_band = resolveCostBand(row.messages_sent, stats.messages);
+    row.judgment_key = resolveJudgmentKey(row.return_band, row.cost_band);
+    row.explanation_key = resolveExplanationKey(row.judgment_key);
+    row.explanation_detail_key = resolveExtremeDetailKey(row, stats);
+
+    const completionScore = normalizeRange(
+      row.completion_pct,
+      stats.completion.min,
+      stats.completion.max
+    );
+    const costScore = inverseNormalized(row.messages_sent, stats.messages.min, stats.messages.max);
+    scoreByLabel.set(row.label, 0.7 * completionScore + 0.3 * costScore);
+  });
+
+  applyRelativeStandings(rows, scoreByLabel);
+  return rows;
+}
+
 export function formatStatBand(stat) {
   if (!stat) return "-";
   return `${Number(stat.mean ?? 0).toFixed(3)} ± ${Number(stat.std ?? 0).toFixed(3)} (95% CI ${Number(
@@ -134,7 +261,7 @@ export function buildStrategyMetricComparisonRows(strategyRows, selectedScenario
 }
 
 export function buildTradeoffScatterRows(runRows) {
-  return (Array.isArray(runRows) ? runRows : []).map((row) => ({
+  const rows = (Array.isArray(runRows) ? runRows : []).map((row) => ({
     strategy: String(row.strategy ?? ""),
     scenario: String(row.scenario ?? ""),
     run_index: Number(row.run_index ?? 0),
@@ -144,4 +271,16 @@ export function buildTradeoffScatterRows(runRows) {
     info_age: Number(row.average_information_age ?? 0),
     label: `${row.strategy} | ${row.scenario} | run ${row.run_index}`
   }));
+
+  const rowsByScenario = new Map();
+  rows.forEach((row) => {
+    if (!rowsByScenario.has(row.scenario)) rowsByScenario.set(row.scenario, []);
+    rowsByScenario.get(row.scenario).push(row);
+  });
+
+  rowsByScenario.forEach((scenarioRows) => {
+    addTradeoffDiagnostics(scenarioRows);
+  });
+
+  return rows;
 }
