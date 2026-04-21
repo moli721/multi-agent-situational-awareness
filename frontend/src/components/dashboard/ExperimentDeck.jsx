@@ -29,6 +29,33 @@ const STRATEGY_COMPARISON_METRICS = new Set([
   "assignment_conflicts"
 ]);
 
+export function TradeoffTooltipCard({ t, point, scenarioLabel, strategyLabel }) {
+  if (!point) return null;
+
+  const explanation = [t(point.explanation_key), point.explanation_detail_key ? t(point.explanation_detail_key) : null]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className="tooltip-card tooltip-card-diagnostic">
+      <div className="tooltip-run-label">
+        {t("tooltip.runLabel", {
+          strategy: strategyLabel(point.strategy),
+          scenario: scenarioLabel(point.scenario),
+          run: point.run_index
+        })}
+      </div>
+      <div className="tooltip-pill">{t(point.judgment_key)}</div>
+      <div className="tooltip-standing">{t(point.standing_key)}</div>
+      <div>{t("tooltip.messages")}: {point.messages_sent}</div>
+      <div>{t("tooltip.completion")}: {point.completion_pct.toFixed(1)}%</div>
+      <div>{t("tooltip.conflicts")}: {point.conflicts}</div>
+      <div>{t("tooltip.infoAge")}: {point.info_age.toFixed(2)}</div>
+      <div className="tooltip-explanation">{explanation}</div>
+    </div>
+  );
+}
+
 export default function ExperimentDeck({
   t,
   scenarioRows,
@@ -399,19 +426,12 @@ export default function ExperimentDeck({
                     if (!active || !payload?.length) return null;
                     const point = payload[0].payload;
                     return (
-                      <div className="tooltip-card">
-                        <div>
-                          {t("tooltip.runLabel", {
-                            strategy: strategyLabel(point.strategy),
-                            scenario: scenarioLabel(point.scenario),
-                            run: point.run_index
-                          })}
-                        </div>
-                        <div>{t("tooltip.messages")}: {point.messages_sent}</div>
-                        <div>{t("tooltip.completion")}: {point.completion_pct.toFixed(1)}%</div>
-                        <div>{t("tooltip.conflicts")}: {point.conflicts}</div>
-                        <div>{t("tooltip.infoAge")}: {point.info_age.toFixed(2)}</div>
-                      </div>
+                      <TradeoffTooltipCard
+                        t={t}
+                        point={point}
+                        scenarioLabel={scenarioLabel}
+                        strategyLabel={strategyLabel}
+                      />
                     );
                   }}
                 />

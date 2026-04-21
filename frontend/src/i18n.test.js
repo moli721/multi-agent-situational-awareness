@@ -42,3 +42,13 @@ test("translate exposes two-page thesis presentation copy", () => {
   assert.equal(translate("en", "page.analysis"), "Experiment Analysis");
   assert.equal(translate("en", "panel.simulationInfo"), "Simulation Info");
 });
+
+test("translate exposes tradeoff tooltip judgment copy", () => {
+  assert.equal(translate("en", "tooltip.judgment.highReturnLowCost"), "High return, low cost");
+  assert.equal(translate("en", "tooltip.standing.weak"), "Among the weaker runs in this scenario");
+  assert.equal(
+    translate("en", "tooltip.explanation.highReturnHighCost"),
+    "Completion is strong, but it relies on heavier communication overhead."
+  );
+  assert.equal(translate("zh", "tooltip.detail.lowConflicts"), "冲突较少，协同更顺。");
+});

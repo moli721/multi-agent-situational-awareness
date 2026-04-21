@@ -151,16 +151,83 @@ test("buildTradeoffScatterRows maps run rows to chart-friendly scatter points", 
     }
   ]);
 
-  assert.deepEqual(rows, [
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].strategy, "current");
+  assert.equal(rows[0].scenario, "with_comm_normal");
+  assert.equal(rows[0].run_index, 2);
+  assert.equal(rows[0].messages_sent, 110);
+  assert.equal(rows[0].completion_pct, 85);
+  assert.equal(rows[0].conflicts, 3);
+  assert.equal(rows[0].info_age, 4.2);
+  assert.equal(rows[0].label, "current | with_comm_normal | run 2");
+  assert.ok(rows[0].judgment_key);
+  assert.ok(rows[0].standing_key);
+  assert.ok(rows[0].explanation_key);
+});
+
+test("buildTradeoffScatterRows adds strong low-cost diagnostics for a dominant run", () => {
+  const rows = buildTradeoffScatterRows([
     {
       strategy: "current",
       scenario: "with_comm_normal",
+      run_index: 0,
+      messages_sent: 80,
+      task_completion_rate: 0.95,
+      assignment_conflicts: 0,
+      average_information_age: 8.5
+    },
+    {
+      strategy: "nearest",
+      scenario: "with_comm_normal",
+      run_index: 1,
+      messages_sent: 180,
+      task_completion_rate: 0.78,
+      assignment_conflicts: 2,
+      average_information_age: 14.2
+    },
+    {
+      strategy: "random",
+      scenario: "with_comm_normal",
       run_index: 2,
-      messages_sent: 110,
-      completion_pct: 85,
-      conflicts: 3,
-      info_age: 4.2,
-      label: "current | with_comm_normal | run 2"
+      messages_sent: 240,
+      task_completion_rate: 0.62,
+      assignment_conflicts: 4,
+      average_information_age: 22.3
     }
   ]);
+
+  assert.equal(rows[0].return_band, "high");
+  assert.equal(rows[0].cost_band, "low");
+  assert.equal(rows[0].judgment_key, "tooltip.judgment.highReturnLowCost");
+  assert.equal(rows[0].standing_key, "tooltip.standing.strong");
+  assert.equal(rows[0].explanation_key, "tooltip.explanation.highReturnLowCost");
+  assert.equal(rows[0].explanation_detail_key, "tooltip.detail.lowConflicts");
+});
+
+test("buildTradeoffScatterRows handles identical message counts without cost normalization errors", () => {
+  const rows = buildTradeoffScatterRows([
+    {
+      strategy: "current",
+      scenario: "with_comm_fault",
+      run_index: 0,
+      messages_sent: 100,
+      task_completion_rate: 0.88,
+      assignment_conflicts: 1,
+      average_information_age: 9.1
+    },
+    {
+      strategy: "nearest",
+      scenario: "with_comm_fault",
+      run_index: 1,
+      messages_sent: 100,
+      task_completion_rate: 0.73,
+      assignment_conflicts: 2,
+      average_information_age: 16.5
+    }
+  ]);
+
+  assert.equal(rows[0].cost_band, "medium");
+  assert.equal(rows[1].cost_band, "medium");
+  assert.equal(rows[0].standing_key, "tooltip.standing.strong");
+  assert.equal(rows[1].standing_key, "tooltip.standing.weak");
 });
