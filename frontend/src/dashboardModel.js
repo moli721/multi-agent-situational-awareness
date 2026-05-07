@@ -27,7 +27,7 @@ export const DEFAULT_CONFIG = {
   num_obstacles: 70,
   max_steps: 160,
   vision_range: 3,
-  comm_range: 8,
+  comm_range: 10,
   enable_communication: true,
   sense_miss_prob: 0.15,
   packet_loss_prob: 0,
@@ -38,8 +38,8 @@ export const DEFAULT_CONFIG = {
   fault_injection_start: 40,
   min_tracking_confidence: 0.25,
   belief_decay: 0.08,
-  max_shared_targets: 6,
-  owner_hint_penalty: 0.3,
+  max_shared_targets: 3,
+  owner_hint_penalty: 0.6,
   decision_strategy: "current"
 };
 

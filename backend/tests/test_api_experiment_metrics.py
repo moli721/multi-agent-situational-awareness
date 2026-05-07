@@ -9,7 +9,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from mas_platform import api  # noqa: E402
+from mas_platform import api, cli  # noqa: E402
 from mas_platform.api import ExperimentRequest  # noqa: E402
 
 
@@ -152,6 +152,56 @@ class ApiExperimentMetricTests(unittest.TestCase):
             )
 
         self.assertEqual(captured_seed_starts, [4321, 4321, 4321])
+
+    def test_fault_scenarios_focus_on_comm_degradation(self) -> None:
+        captured_configs = []
+
+        def fake_run_monte_carlo(config, runs, seed_start=None):
+            captured_configs.append(config)
+            return [
+                {
+                    "seed": float((seed_start or 0) + idx),
+                    "steps_used": 40.0,
+                    "task_completion_rate": 0.5,
+                    "collaboration_efficiency": 0.1,
+                    "task_completion_latency": 5.0,
+                    "decision_response_time_steps": 5.0,
+                    "messages_sent": 10.0,
+                    "messages_received": 10.0,
+                    "failed_agents": 0.0,
+                    "coverage_rate": 0.3,
+                    "average_information_age": 4.0,
+                    "assignment_conflicts": 2.0,
+                }
+                for idx in range(runs)
+            ]
+
+        with patch.object(api, "run_monte_carlo", side_effect=fake_run_monte_carlo):
+            api.experiments(
+                ExperimentRequest(
+                    config={
+                        "random_seed": 4321,
+                        "num_targets": 10,
+                        "sense_miss_prob": 0.15,
+                        "agent_failure_prob": 0.0,
+                    },
+                    runs=3,
+                    strategies=["current"],
+                )
+            )
+
+        api_fault = captured_configs[2]
+        self.assertEqual(api_fault.packet_loss_prob, 0.25)
+        self.assertEqual(api_fault.comm_delay_steps, 2)
+        self.assertAlmostEqual(api_fault.sense_miss_prob, 0.23)
+        self.assertEqual(api_fault.agent_failure_prob, 0.005)
+
+        cli_fault = cli._build_scenarios(cli._base_config(seed=1000))["with_comm_fault"]
+        self.assertEqual(cli_fault.packet_loss_prob, 0.25)
+        self.assertEqual(cli_fault.comm_delay_steps, 2)
+        self.assertEqual(cli_fault.sense_miss_prob, 0.23)
+        self.assertEqual(cli_fault.agent_failure_prob, 0.005)
+        self.assertEqual(cli_fault.fault_injection_start, 60)
 
 
 if __name__ == "__main__":

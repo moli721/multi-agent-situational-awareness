@@ -12,6 +12,12 @@ class SituationalSimulation:
         self.config = config
         self.seed = config.random_seed if seed is None else seed
         self.rng = random.Random(self.seed)
+        self.target_rng = random.Random(self.seed + 10_001)
+        self.failure_rng = random.Random(self.seed + 15_001)
+        self.sense_rng = random.Random(self.seed + 20_001)
+        self.comm_rng = random.Random(self.seed + 30_001)
+        self.motion_rng = random.Random(self.seed + 40_001)
+        self.strategy_rng = random.Random(self.seed + 50_001)
         self.current_step = 0
 
         self.agents: Dict[int, SituationalAgent] = {}
@@ -127,7 +133,7 @@ class SituationalSimulation:
         for agent in self.agents.values():
             if agent.failed:
                 continue
-            if self.rng.random() < self.config.agent_failure_prob:
+            if self.failure_rng.random() < self.config.agent_failure_prob:
                 agent.failed = True
                 agent.assigned_target = None
                 agent.inbox.clear()
@@ -143,11 +149,11 @@ class SituationalSimulation:
         for target in self.targets.values():
             if not target.active:
                 continue
-            if self.rng.random() > self.config.target_move_prob:
+            if self.target_rng.random() > self.config.target_move_prob:
                 continue
 
             # Bias target movement toward event hotspots, plus random disturbance.
-            if self.rng.random() < self.config.target_hotspot_bias:
+            if self.target_rng.random() < self.config.target_hotspot_bias:
                 hotspot = self._nearest_hotspot(target.pos)
                 next_pos = self._move_towards_with_obstacle_avoidance(
                     src=target.pos,
@@ -156,7 +162,7 @@ class SituationalSimulation:
                 )
             else:
                 neighbors = self._free_neighbors(target.pos, blocked)
-                next_pos = self.rng.choice(neighbors) if neighbors else target.pos
+                next_pos = self.target_rng.choice(neighbors) if neighbors else target.pos
 
             blocked.discard(target.pos)
             target.pos = next_pos
@@ -206,7 +212,7 @@ class SituationalSimulation:
                 sense_miss_prob=self.config.sense_miss_prob,
                 position_noise_radius=self.config.position_noise_radius,
                 clamp_fn=self._clamp_pos,
-                rng=self.rng,
+                rng=self.sense_rng,
             )
             for target_id in seen_ids:
                 self.target_first_observed_step.setdefault(target_id, self.current_step)
@@ -229,7 +235,7 @@ class SituationalSimulation:
                 continue
 
             for neighbor in self._comm_neighbors(agent):
-                if self.rng.random() < self.config.packet_loss_prob:
+                if self.comm_rng.random() < self.config.packet_loss_prob:
                     continue
                 message = Message(
                     deliver_step=self.current_step + self.config.comm_delay_steps,
@@ -268,7 +274,7 @@ class SituationalSimulation:
         if strategy == "random":
             if not agent_ids:
                 return None
-            return self.rng.choice(sorted(agent_ids))
+            return self.strategy_rng.choice(sorted(agent_ids))
 
         ranked: List[Tuple[int, float, int, int]] = []
         for agent_id in agent_ids:
@@ -333,7 +339,7 @@ class SituationalSimulation:
                 occupied=set(),
                 team_distance_hints=team_distance_hints,
                 strategy=self.config.decision_strategy,
-                rng=self.rng,
+                rng=self.strategy_rng,
             )
             if first_choice is None:
                 continue
@@ -342,22 +348,48 @@ class SituationalSimulation:
             1 for agent_ids in first_choice_groups.values() if len(agent_ids) > 1
         )
 
-        for agent_id in active_agent_ids:
+        conflict_winners: Dict[int, int] = {}
+        for target_id, agent_ids in first_choice_groups.items():
+            if len(agent_ids) <= 1:
+                continue
+            winner = self._resolve_conflict_winner(target_id, agent_ids)
+            if winner is not None:
+                conflict_winners[winner] = target_id
+
+        assignment_order = sorted(
+            active_agent_ids,
+            key=lambda agent_id: (
+                0 if agent_id in conflict_winners else 1,
+                active_agent_ids.index(agent_id),
+            ),
+        )
+
+        for agent_id in assignment_order:
             agent = self.agents[agent_id]
 
-            chosen_target = agent.choose_target(
-                targets=self.targets,
-                current_step=self.current_step,
-                belief_decay=self.config.belief_decay,
-                min_tracking_confidence=self.config.min_tracking_confidence,
-                owner_hint=self.target_owner_hint,
-                owner_penalty=self.config.owner_hint_penalty,
-                occupied=occupied_targets,
-                team_distance_hints=team_distance_hints,
-                strategy=self.config.decision_strategy,
-                rng=self.rng,
-            )
+            chosen_target = conflict_winners.get(agent_id)
+            if chosen_target is not None:
+                target = self.targets.get(chosen_target)
+                if target is None or not target.active or chosen_target in occupied_targets:
+                    chosen_target = None
+
             if chosen_target is None:
+                chosen_target = agent.choose_target(
+                    targets=self.targets,
+                    current_step=self.current_step,
+                    belief_decay=self.config.belief_decay,
+                    min_tracking_confidence=self.config.min_tracking_confidence,
+                    owner_hint=self.target_owner_hint,
+                    owner_penalty=self.config.owner_hint_penalty,
+                    occupied=occupied_targets,
+                    team_distance_hints=team_distance_hints,
+                    strategy=self.config.decision_strategy,
+                    rng=self.strategy_rng,
+                )
+            if chosen_target is None:
+                continue
+            target = self.targets.get(chosen_target)
+            if target is None or not target.active or chosen_target in occupied_targets:
                 continue
 
             occupied_targets.add(chosen_target)
@@ -390,7 +422,7 @@ class SituationalSimulation:
 
             if target_pos is None:
                 candidates = self._free_neighbors(agent.pos, blocked)
-                next_pos = self.rng.choice(candidates) if candidates else agent.pos
+                next_pos = self.motion_rng.choice(candidates) if candidates else agent.pos
             else:
                 next_pos = self._move_towards_with_obstacle_avoidance(
                     src=agent.pos,

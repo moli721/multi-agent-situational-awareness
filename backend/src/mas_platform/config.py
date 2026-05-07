@@ -14,14 +14,14 @@ class SimulationConfig:
 
     # Perception and communication
     vision_range: int = 4
-    comm_range: int = 7
+    comm_range: int = 10
     enable_communication: bool = True
     sense_miss_prob: float = 0.10
     position_noise_radius: int = 1
     min_tracking_confidence: float = 0.25
     belief_decay: float = 0.07
-    max_shared_targets: int = 6
-    owner_hint_penalty: float = 0.30
+    max_shared_targets: int = 3
+    owner_hint_penalty: float = 0.60
     packet_loss_prob: float = 0.00
     comm_delay_steps: int = 1
 

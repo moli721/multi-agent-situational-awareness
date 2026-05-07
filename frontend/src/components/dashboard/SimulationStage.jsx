@@ -187,7 +187,23 @@ export default function SimulationStage({
         </div>
       ) : (
         <div className="stage-empty-state">
-          <div className="stage-empty-graphic" />
+          <div className="stage-empty-graphic">
+            <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="100" cy="100" r="80" stroke="var(--accent)" strokeOpacity="0.2" strokeWidth="2" strokeDasharray="6 6" />
+              <circle cx="100" cy="100" r="50" stroke="var(--support)" strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
+              <circle cx="100" cy="100" r="20" fill="var(--accent)" fillOpacity="0.1" stroke="var(--accent)" strokeOpacity="0.4" strokeWidth="2" />
+              <path d="M100 20 L100 180 M20 100 L180 100" stroke="var(--text-faint)" strokeOpacity="0.2" strokeWidth="1" />
+
+              <circle cx="140" cy="60" r="6" fill="var(--accent)" />
+              <circle cx="50" cy="110" r="5" fill="var(--support)" />
+              <circle cx="130" cy="150" r="4" fill="var(--alert)" />
+
+              <path d="M100 100 L140 60" stroke="var(--accent)" strokeOpacity="0.4" strokeWidth="1.5" strokeDasharray="2 2" />
+              <path d="M100 100 L50 110" stroke="var(--support)" strokeOpacity="0.4" strokeWidth="1.5" strokeDasharray="2 2" />
+              <path d="M140 60 L130 150" stroke="var(--text-faint)" strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" />
+            </svg>
+            <div className="radar-sweep"></div>
+          </div>
           <div className="stage-empty-copy">
             <h4>{t("panel.finalWorld")}</h4>
             <p>{t("placeholder.simulationGuide")}</p>

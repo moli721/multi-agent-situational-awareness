@@ -1056,29 +1056,45 @@ select {
 .stage-empty-graphic {
   width: 164px;
   height: 164px;
-  border-radius: 32px;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.18), transparent 55%),
-    linear-gradient(145deg, rgba(219, 234, 254, 0.88), rgba(236, 252, 203, 0.62));
+  border-radius: 50%;
+  background: var(--bg-panel-solid);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    0 18px 38px rgba(37, 99, 235, 0.12);
+    0 18px 38px rgba(37, 99, 235, 0.08);
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
-.stage-empty-graphic::before,
-.stage-empty-graphic::after {
-  content: "";
+.stage-empty-graphic svg {
+  width: 100%;
+  height: 100%;
   position: absolute;
-  inset: 18px;
-  border: 1px solid rgba(37, 99, 235, 0.16);
-  border-radius: 24px;
+  inset: 0;
 }
 
-.stage-empty-graphic::after {
-  inset: 40px;
-  border-color: rgba(20, 184, 166, 0.2);
-  border-radius: 18px;
+.radar-sweep {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100px;
+  height: 100px;
+  background: conic-gradient(from 0deg, transparent 70%, rgba(14, 165, 233, 0.2) 100%);
+  transform-origin: 0 0;
+  animation: sweep 4s linear infinite;
+  border-radius: 0 100px 0 0;
+}
+
+@keyframes sweep {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .stage-empty-copy h4 {
@@ -1245,6 +1261,7 @@ select {
 }
 
 @media (max-width: 760px) {
+
   .page-tabs,
   .lang-switch {
     width: 100%;
