@@ -71,9 +71,9 @@ test("HeroHeader uses the current frontend host when window location is availabl
 test("App renders dedicated simulation navigation and hides analysis panels on the default page", () => {
   const html = renderToStaticMarkup(<App />);
 
-  assert.match(html, /仿真展示/);
+  assert.match(html, /态势推演/);
   assert.match(html, /实验分析/);
-  assert.match(html, /最终态势视图/);
+  assert.match(html, /最终态势/);
   assert.doesNotMatch(html, /panel\.scenarioComparison/);
 });
 

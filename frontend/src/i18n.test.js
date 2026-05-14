@@ -50,5 +50,5 @@ test("translate exposes tradeoff tooltip judgment copy", () => {
     translate("en", "tooltip.explanation.highReturnHighCost"),
     "Completion is strong, but it relies on heavier communication overhead."
   );
-  assert.equal(translate("zh", "tooltip.detail.lowConflicts"), "冲突较少，协同更顺。");
+  assert.equal(translate("zh", "tooltip.detail.lowConflicts"), "冲突较少，协同过程更顺。");
 });
